@@ -22,6 +22,7 @@ cross-device-sync/
 ├── README.md                         # 本文件
 ├── PUBLISH.md                       # GitHub 发布指南
 ├── AI_HANDOFF_GUIDE.md            # AI 跨设备交接操作指南（两台 AI 共读）
+├── sync_identity.py                  # 用户身份 & 记忆同步脚本（v3.1）
 ├── fix_db_isolation_v3.ps1           # 数据库隔离脚本（核心）
 ├── fix_workspace_state_sync.ps1      # workspace-state 同步修复
 └── scripts/
@@ -45,6 +46,7 @@ cross-device-sync/
 | **会话恢复** | 消息缓存丢失时，基于云端摘要 + 项目产出重建可用的会话上下文 |
 | **会话合并** | 把分散在多个会话中的相关讨论合并到一个对话中，自动去重、按时间排序 |
 | **WAL 强制刷盘** | 关闭前确保 SQLite WAL 数据写入主数据库，避免数据丢失 |
+| **用户身份 & 记忆同步** | `sync_identity.py` 通过 `_sync/identity\` 中转，同步 `~/.workbuddy/memory/` 等用户级文件，确保每日交接单跨设备可读 |
 
 ## 前置条件
 
