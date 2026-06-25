@@ -225,6 +225,39 @@ Without reading it, you are BLIND to the other computer's work.
 
 ---
 
+#### ⚠️ MANDATORY: Update HANDOFF.md After EVERY Substantive Work Session
+
+**This is the rule that was missing — and why cross-device sync kept breaking.**
+
+After completing ANY substantive work (generating files, making decisions, fixing bugs, creating reports,
+writing code, designing assets, etc.), the AI MUST update `C:\WorkBuddy\_sync\HANDOFF.md`:
+
+1. Read the current `C:\WorkBuddy\_sync\HANDOFF.md` file
+2. Update the AI section (`✅` → end of file) with:
+   - What was accomplished in this session (project, files created, key decisions)
+   - What the current status is (e.g., "GDD v0.3 complete, ready for review")
+   - What the next steps are (e.g., "待对方确认后推进众筹页面设计")
+3. Write the updated file
+
+**Triggers** (any of these = MUST update HANDOFF.md):
+- User says "生成交接单" / "写交接单" / "更新交接单" / "同步" / "记得写交接单"
+- Session is ending and substantive work was done
+- User is about to switch computers (explicitly or implicitly)
+- Any multi-step task (8+ tool calls) has been completed
+- The AI detects that "important decisions were made this session"
+
+**Do NOT wait for the user to remind you.** If you did real work, update HANDOFF.md.
+
+**What to include** (key = the other AI needs to understand what happened WITHOUT asking):
+- Date/time and computer name
+- Which project(s) were worked on
+- Specific files created/modified with paths
+- Key decisions and their rationale
+- Current blockers or questions
+- Explicit next steps
+
+---
+
 **Leaving a computer** — say "生成交接单" to create/update `C:\WorkBuddy\_sync\HANDOFF.md`,
 recording what was done, what's next, key decisions, and any test messages the user wants to verify.
 
@@ -240,6 +273,20 @@ Then tell the user what the other computer's AI left for them.
 
 The `sync-task` skill (installed alongside this skill) implements this workflow automatically.
 If `sync-task` is loaded, it handles the read/generate cycle.
+
+#### Workspace-Level STATUS.md (2026-06-25 — fills the "old workspace blind spot")
+
+In addition to the global HANDOFF.md, each workspace now has its own status file:
+`.workbuddy/memory/STATUS.md`
+
+This solves two critical blind spots:
+1. **Returning to an old workspace** (e.g. worked on Project A on 5/20, came back on 6/5) — the AI reads STATUS.md and knows exactly where things were left off
+2. **New conversation in same workspace** (e.g. conversation A did image processing, conversation B continues GDD) — new conversation's AI reads STATUS.md and picks up where A left off
+
+**When entering a workspace**: AI reads STATUS.md → MEMORY.md → recent daily logs (rules in sync-task skill)
+**When leaving a workspace**: AI updates STATUS.md with latest progress (rules in sync-task skill)
+
+STATUS.md format is lightweight — project goal, latest progress, current todos, recent conversation summary, key file paths. See `sync-task` skill for the full read/write protocol.
 
 ### Step 7: Verify
 
