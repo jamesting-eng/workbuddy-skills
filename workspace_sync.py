@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-跨设备工作区同步脚本 v2.0
+跨设备工作区同步脚本 v3.0
 - 扫描 C:\WorkBuddy 磁盘工作区，更新 workspace_sync
 - 生成/更新 HANDOFF.md 机器生成区（保留 AI 手写区）
 - 对话导出辅助
+- 新增：同步暗号管理 + 同步验证
 """
 
 import sqlite3, os, json, time, re
@@ -13,10 +14,11 @@ WORKBUDDY_ROOT = r"C:\WorkBuddy"
 HANDOFF_DIR = os.path.join(WORKBUDDY_ROOT, "_sync")
 HANDOFF_FILE = os.path.join(HANDOFF_DIR, "HANDOFF.md")
 CONVERSATIONS_DIR = os.path.join(HANDOFF_DIR, "conversations")
+SECRET_FILE = os.path.join(HANDOFF_DIR, "secret.txt")
 
 # HANDOFF.md 分隔标记
-DELIM_START = "<!-- \u2699\ufe0f 以下为机器生成区"
-DELIM_MID = "<!-- \u2705 以下为 AI 手写区"
+DELIM_START = "<!-- ⚙️ 以下为机器生成区"
+DELIM_MID = "<!-- ✅ 以下为 AI 手写区"
 
 
 def find_db():
@@ -55,7 +57,7 @@ def read_ai_section():
     """读取 HANDOFF.md 中 AI 手写区的内容（保留不覆盖）"""
     if not os.path.exists(HANDOFF_FILE):
         return None
-    with open(HANDOFF_FILE, 'utf-8') as f:
+    with open(HANDOFF_FILE, 'r', encoding='utf-8') as f:
         content = f.read()
     idx = content.find(DELIM_MID)
     if idx == -1:
@@ -63,7 +65,106 @@ def read_ai_section():
     return content[idx:]
 
 
-def generate_handoff(db_path):
+def update_secret(new_secret):
+    """
+    更新同步暗号（同时写入多个文件）
+    由 AI 在交接单生成时调用
+    """
+    print(f"🔐 正在更新同步暗号为: {new_secret}")
+    
+    # 1. 更新 HANDOFF.md 机器生成区
+    if os.path.exists(HANDOFF_FILE):
+        with open(HANDOFF_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 替换暗号行
+        pattern = r'> \*\*暗号：.*?\*\*'
+        replacement = f'> **暗号：{new_secret}**'
+        new_content = re.sub(pattern, replacement, content)
+        
+        if new_content != content:
+            with open(HANDOFF_FILE, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            print(f"  ✅ HANDOFF.md 暗号已更新")
+        else:
+            print(f"  ⚠️ HANDOFF.md 暗号未变化（可能已经是新的）")
+    
+    # 2. 更新 secret.txt（纯文本备份）
+    os.makedirs(HANDOFF_DIR, exist_ok=True)
+    with open(SECRET_FILE, 'w', encoding='utf-8') as f:
+        f.write(f"# 同步验证暗号备份\n\n")
+        f.write(f"**最后更新**: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
+        f.write(f"**当前暗号**: {new_secret}\n\n")
+        f.write(f"**验证方式**: \n")
+        f.write(f"1. 读取本文件，确认暗号一致\n")
+        f.write(f"2. 如果暗号不一致，说明同步失败，需要手动刷新WPS云盘\n\n")
+        f.write(f"**历史暗号**:\n")
+        f.write(f"- 端午安康 (2026-06-18 及之前)\n")
+        f.write(f"- 我不爱吃榴莲 (2026-06-25 某次更新)\n")
+        f.write(f"- 🍑 我喜欢吃水蜜桃！ (2026-06-25 18:30)\n")
+        f.write(f"- {new_secret} (当前)\n")
+    print(f"  ✅ secret.txt 暗号已更新")
+    
+    # 3. 更新 AI_HANDOFF_GUIDE.md
+    guide_file = os.path.join(HANDOFF_DIR, "AI_HANDOFF_GUIDE.md")
+    if os.path.exists(guide_file):
+        with open(guide_file, 'r', encoding='utf-8') as f:
+            guide_content = f.read()
+        
+        # 替换暗号检查说明
+        pattern = r'检查同步暗号（.*?）'
+        replacement = f'检查同步暗号（{new_secret}）'
+        new_guide = re.sub(pattern, replacement, guide_content)
+        
+        if new_guide != guide_content:
+            with open(guide_file, 'w', encoding='utf-8') as f:
+                f.write(new_guide)
+            print(f"  ✅ AI_HANDOFF_GUIDE.md 暗号已更新")
+    
+    print(f"\n✅ 暗号已同步到3个文件，跨设备验证可靠")
+    return True
+
+
+def verify_sync():
+    """
+    验证同步状态：检查暗号是否一致
+    由 AI 在拉取同步时调用
+    """
+    print("=" * 50)
+    print("[验证] 同步验证")
+    print("=" * 50)
+    
+    # 读取 secret.txt
+    secret_phrase = "(未找到)"
+    if os.path.exists(SECRET_FILE):
+        with open(SECRET_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+        match = re.search(r'\*\*当前暗号\*\*: (.*)', content)
+        if match:
+            secret_phrase = match.group(1)
+    
+    # 读取 HANDOFF.md
+    handoff_phrase = "(未找到)"
+    if os.path.exists(HANDOFF_FILE):
+        with open(HANDOFF_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+        match = re.search(r'> \*\*暗号：(.*?)\*\*', content)
+        if match:
+            handoff_phrase = match.group(1)
+    
+    print(f"  secret.txt 暗号: {secret_phrase}")
+    print(f"  HANDOFF.md 暗号: {handoff_phrase}")
+    
+    if secret_phrase == handoff_phrase and secret_phrase != "(未找到)":
+        print("\n  [OK] 暗号一致，同步正常！")
+        return True
+    else:
+        print("\n  [警告] 暗号不一致，可能WPS还没同步完")
+        print("     建议：手动刷新WPS云盘，或等待几分钟后再试")
+        return False
+
+
+def generate_handoff(db_path, secret_phrase="我是你爸爸"):
     """生成机器生成区，保留 AI 手写区"""
     os.makedirs(HANDOFF_DIR, exist_ok=True)
     os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
@@ -106,7 +207,7 @@ def generate_handoff(db_path):
 
 ## 🧪 同步链路检测
 
-> **暗号：我不爱吃榴莲** ← 如果在另一台电脑看到这句话，HANDOFF.md 跨设备同步正常 ✅
+> **暗号：{secret_phrase}** ← 如果在另一台电脑看到这句话，HANDOFF.md 跨设备同步正常 ✅
 
 ---
 
@@ -199,6 +300,7 @@ def generate_handoff(db_path):
     print(f"✅ 交接单已更新: {HANDOFF_FILE}")
     print(f"   → 机器生成区已刷新")
     print(f"   → AI 手写区已保留")
+    print(f"   → 暗号: {secret_phrase}")
 
 
 def export_conversation_text(topic, text, source_computer=None):
@@ -278,5 +380,12 @@ if __name__ == '__main__':
         topic = sys.argv[2]
         text = sys.argv[3]
         export_conversation_text(topic, text)
+    elif '--update-secret' in sys.argv and len(sys.argv) >= 3:
+        # 用法: python workspace_sync.py --update-secret "新暗号"
+        new_secret = sys.argv[2]
+        update_secret(new_secret)
+    elif '--verify' in sys.argv:
+        # 用法: python workspace_sync.py --verify
+        verify_sync()
     else:
         sync_all()

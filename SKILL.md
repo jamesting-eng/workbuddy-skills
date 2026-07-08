@@ -182,8 +182,12 @@ use handoff notes to pass task context between devices.
 
 **The HANDOFF.md file lives at**: `C:\WorkBuddy\_sync\HANDOFF.md`
 
-Because `C:\WorkBuddy` is a Junction to WPS cloud, this file is the SAME physical file
-on both computers — the only shared "memory channel" between two AI instances.
+> ⚠️ **Architecture note (v3.2+, 2026-07)**: `HANDOFF.md` is **NO LONGER a live-shared Junction file**.
+> It syncs across devices via the `sync_identity.py` **transit channel**
+> (`C:\WorkBuddy\_sync\identity\HANDOFF.md`), driven by `watch_sync.py` (single-leader daemon)
+> or an explicit `sync_identity.py push/pull`. The `C:\WorkBuddy` Junction only unifies
+> **workspace paths** — it does NOT live-sync handoff/memory files (that link was confirmed
+> broken in 2026-07 and caused the `-副本` conflict storm). See **Step 6b** below.
 
 ---
 
@@ -273,6 +277,27 @@ Then tell the user what the other computer's AI left for them.
 
 The `sync-task` skill (installed alongside this skill) implements this workflow automatically.
 If `sync-task` is loaded, it handles the read/generate cycle.
+
+### Step 6b: Ongoing Sync — sync_identity.py + watch_sync.py daemon (v3.2+)
+
+The HANDOFF.md / identity / workspace-memory files flow across devices through a **transit channel**,
+NOT a live Junction. Two mechanisms:
+
+1. **Daemon (recommended, hands-off)** — `watch_sync.py` runs at startup (via `start_sync.bat` in
+   `shell:startup`). It watches **SOURCE files only** (user-level memory, per-workspace memory,
+   HANDOFF.md / secret.txt / AI_HANDOFF_GUIDE.md) and auto-pushes to the transit dir on change.
+   A **single-leader election** (per-machine heartbeat file) ensures only ONE active machine writes
+   the transit dir at a time — this is what ended the `-副本` conflict storm. It deliberately does
+   NOT watch the transit dir itself, preventing download→push→download loops. Machine-independent
+   (`sys.executable`), safe to run on both computers simultaneously.
+
+2. **Manual push/pull (fallback)** — run `sync_identity.py push` before leaving a computer, and
+   `sync_identity.py pull` after arriving at the other. `.bat` wrappers: `push.bat`, `pull.bat`,
+   `一键同步.bat`.
+
+The transit directory is `C:\WorkBuddy\_sync\identity\` (synced via WPS cloud as a *managed folder*,
+not as a live Junction of the whole tree). `find_junk.py` / `clean_junk.py` clean up any `-副本`
+conflict files that slip through.
 
 #### Workspace-Level STATUS.md (2026-06-25 — fills the "old workspace blind spot")
 
@@ -626,6 +651,28 @@ WPS app > Settings > Cloud Document > Cache Location
 The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — only `<id>` varies.
 
 ## Resources
+
+### sync_identity.py (v3.5)
+
+Bidirectional **transit-channel** sync. Collects each workspace's `.workbuddy/memory/` into
+`C:\WorkBuddy\_sync\identity\`, and distributes transit memory back to workspaces on pull.
+Also syncs HANDOFF.md / identity files. v3.4+ auto-cleans WPS `-副本` conflict files and skips
+any file containing "副本" to prevent sync storms; v3.5 sweeps junk before push.
+
+### watch_sync.py (v2.0)
+
+Background daemon with single-leader election. Watches source files, auto-pushes on change.
+Machine-independent (`sys.executable`), safe to run on both computers simultaneously.
+
+### find_junk.py / clean_junk.py
+
+WPS conflict-copy scanner (generates an HTML report) and cleaner (only deletes copies that have a
+pristine original). Use after a sync storm or whenever thousands of `-副本` files appear.
+
+### workspace_sync.py (v3.0)
+
+Mechanical sync: scans `C:\WorkBuddy` workspaces, regenerates the HANDOFF.md machine section
+(leaving the AI-written section untouched), and assists with conversation export + sync passcode.
 
 ### scripts/fix_paths.py
 

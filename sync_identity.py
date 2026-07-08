@@ -1,8 +1,28 @@
 #!/usr/bin/env python3
 """
-WorkBuddy 跨设备身份 & 记忆同步脚本 v3.1
+WorkBuddy 跨设备身份 & 记忆同步脚本 v3.4
 =============================================
 通过 C:\\WorkBuddy\\_sync\\identity\\ 中转，实现跨设备同步。
+
+v3.5 (2026-07-09):
+  - [增强] 推送前清扫范围扩大到整个 _sync 树 + 各工作区 .workbuddy/memory/
+    （根治 7/6 冲突风暴遗留的 1.1 万副本，并阻止将来垃圾上传到云）
+  - [新增] 同步 find_junk.py（垃圾扫描器）/ clean_junk.py（垃圾清理器）到双端
+  - [修复] .bat 文件改用 GBK 编码（修复 Windows CMD 乱码）
+
+v3.4 (2026-07-08):
+  - [修复] 自动清理 WPS 云盘冲突副本文件 (-副本)
+  - [修复] 同步时跳过所有含"副本"的文件（防止同步风暴）
+
+v3.3 (2026-07-06):
+  - 同步守护进程脚本本身：watch_sync.py / start_sync.bat / AI_HANDOFF_GUIDE.md
+    两台电脑自动共享守护进程和文档，避免配置漂移
+  - 用户级 SOUL.md / USER.md 注入跨设备同步铁律
+
+v3.2 (2026-07-06):
+  - 【根治WPS云盘失效】把 HANDOFF.md 加入同步清单，走中转目录而非 WPS 云盘
+  - _sync/HANDOFF.md 仍然由 workspace_sync.py 生成机器区、AI 手写
+  - 但跨设备流转改走 _sync/identity/HANDOFF.md 中转
 
 v3.1 (2026-06-19):
   - find_workspaces() 支持多工作区路径（公司/家里可能不同）
@@ -30,6 +50,12 @@ from pathlib import Path
 HOME = Path.home()
 LOCAL = HOME / ".workbuddy"
 SYNC = Path(r"C:\WorkBuddy\_sync\identity")
+# HANDOFF.md 路径（与 _sync/identity/ 中转目录并列）
+HANDOFF_LOCAL = Path(r"C:\WorkBuddy\_sync\HANDOFF.md")
+HANDOFF_REMOTE = SYNC / "HANDOFF.md"
+
+# 跳过 WPS 云盘冲突副本文件（防止同步风暴）
+SKIP_PATTERNS = {"-副本", "副本"}
 
 # 工作区根路径（支持多个，公司/家里可能不同）
 # 脚本会自动探测，此处为默认值
@@ -96,6 +122,32 @@ def find_workspaces(bases: list[Path] | None = None) -> list[Path]:
 
 # ─── 文件同步工具 ─────────────────────────────────────────────────────────
 
+def is_skip_file(name: str) -> bool:
+    """检查文件名是否应该跳过（WPS冲突副本等）。"""
+    for pat in SKIP_PATTERNS:
+        if pat in name:
+            return True
+    return False
+
+
+def cleanup_duplicates(dirs: list[Path]) -> int:
+    """清理 WPS 云盘生成的 -副本 冲突文件。返回删除数量。"""
+    cleaned = 0
+    for d in dirs:
+        if not d.exists():
+            continue
+        for f in d.rglob("*"):
+            if f.is_file() and is_skip_file(f.name):
+                try:
+                    f.unlink()
+                    cleaned += 1
+                except OSError:
+                    pass
+    if cleaned > 0:
+        print(f"  [clean] Removed {cleaned} WPS conflict copies")
+    return cleaned
+
+
 def sync_file(local: Path, remote: Path, force: str | None) -> str:
     """同步单个文件，返回状态字符串。
 
@@ -144,12 +196,12 @@ def sync_dir(local_dir: Path, remote_dir: Path, force: str | None) -> dict:
     local_files: dict[Path, Path] = {}
     if local_dir.exists():
         for f in local_dir.rglob("*"):
-            if f.is_file():
+            if f.is_file() and not is_skip_file(f.name):
                 local_files[f.relative_to(local_dir)] = f
     remote_files: dict[Path, Path] = {}
     if remote_dir.exists():
         for f in remote_dir.rglob("*"):
-            if f.is_file():
+            if f.is_file() and not is_skip_file(f.name):
                 remote_files[f.relative_to(remote_dir)] = f
     for rel in set(local_files) | set(remote_files):
         r = sync_file(local_dir / rel, remote_dir / rel, force)
@@ -271,8 +323,15 @@ def main():
     SYNC.mkdir(parents=True, exist_ok=True)
     total = {"pushed": 0, "pulled": 0, "skipped": 0}
 
-    # 自动探测工作区路径
+    # 自动探测工作区路径（提前，供清扫与同步复用）
     bases = detect_workspace_bases()
+
+    # --- ① 清理 WPS 冲突副本文件（防止同步风暴 / 阻止垃圾上传到云） ---
+    # 清扫范围：整个 _sync 传输树 + 各工作区 .workbuddy/memory/
+    junk_roots = [SYNC]
+    for ws in find_workspaces(bases):
+        junk_roots.append(ws / ".workbuddy" / "memory")
+    cleanup_duplicates(junk_roots)
     print("=" * 62)
     print(f"WorkBuddy 跨设备同步 v3.1")
     direction_label = {"push": "推送 (本地→共享)", "pull": "拉取 (共享→本地)"}.get(force, "双向同步 (较新者胜出)")
@@ -305,6 +364,31 @@ def main():
             total["pulled"] += 1
         else:
             total["skipped"] += 1
+
+    # --- ②b v3.2: HANDOFF.md 也走中转通道（绕开失效的 WPS 云盘） ---
+    r = sync_file(HANDOFF_LOCAL, HANDOFF_REMOTE, force)
+    arrow = {"pushed": "→", "pulled": "←"}.get(r, "·")
+    print(f"  {arrow} HANDOFF.md (中转通道): {r}")
+    if "push" in r:
+        total["pushed"] += 1
+    elif "pull" in r:
+        total["pulled"] += 1
+    else:
+        total["skipped"] = total.get("skipped", 0) + 1
+
+    # --- ②c v3.3: 同步守护进程和开机启动脚本（两台电脑自动同步 watch_sync 本身） ---
+    SYNC_SELF_DIR = Path(r"C:\WorkBuddy\_sync")
+    for self_fname in ["watch_sync.py", "start_sync.bat", "AI_HANDOFF_GUIDE.md",
+                       "find_junk.py", "clean_junk.py", "sync_identity.py"]:
+        r = sync_file(SYNC_SELF_DIR / self_fname, SYNC / self_fname, force)
+        arrow = {"pushed": "→", "pulled": "←"}.get(r, "·")
+        print(f"  {arrow} {self_fname} (守护进程): {r}")
+        if "push" in r:
+            total["pushed"] += 1
+        elif "pull" in r:
+            total["pulled"] += 1
+        else:
+            total["skipped"] = total.get("skipped", 0) + 1
 
     s = sync_dir(LOCAL / "memory", SYNC / "memory", force)
     print(f"  📁 memory/: 推送 {s['pushed']} | 拉取 {s['pulled']} | 跳过 {s['skipped']}")
