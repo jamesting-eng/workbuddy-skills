@@ -10,6 +10,12 @@ v3.5 (2026-07-09):
   - [新增] 同步 find_junk.py（垃圾扫描器）/ clean_junk.py（垃圾清理器）到双端
   - [修复] .bat 文件改用 GBK 编码（修复 Windows CMD 乱码）
 
+v3.6 (2026-08-02):
+  - 【根治 MEMORY.md 跨工作区互覆污染】collect/distribute 仅允许 YYYY-MM-DD.md
+    每日日志进入扁平用户级 memory/ 命名空间；项目身份文件(MEMORY.md/STATUS.md/
+    DAILY_STATUS.md/HOME_WRAPUP.md/MORNING_BRIEF.md)按名同，压平会 mtime 较新者胜出
+    互相覆盖并扇回所有工作区（7/24、7/30 两次事故）。修复后项目记忆不再被合并/扇出。
+
 v3.4 (2026-07-08):
   - [修复] 自动清理 WPS 云盘冲突副本文件 (-副本)
   - [修复] 同步时跳过所有含"副本"的文件（防止同步风暴）
@@ -43,6 +49,7 @@ v2.0 (2026-06-18):
 """
 
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -56,6 +63,9 @@ HANDOFF_REMOTE = SYNC / "HANDOFF.md"
 
 # 跳过 WPS 云盘冲突副本文件（防止同步风暴）
 SKIP_PATTERNS = {"-副本", "副本"}
+
+# 仅每日日志（YYYY-MM-DD.md）允许进入扁平用户级 memory/ 命名空间（v3.6）
+_DAILY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 
 # 工作区根路径（支持多个，公司/家里可能不同）
 # 脚本会自动探测，此处为默认值
@@ -128,6 +138,19 @@ def is_skip_file(name: str) -> bool:
         if pat in name:
             return True
     return False
+
+
+def is_daily_log(name: str) -> bool:
+    """仅允许 YYYY-MM-DD.md 形式的每日日志进入扁平用户级 memory/ 命名空间。
+
+    v3.6 (2026-08-02): 修复 MEMORY.md 跨工作区互覆污染事故根因。
+    项目级身份文件（MEMORY.md / STATUS.md / DAILY_STATUS.md / HOME_WRAPUP.md /
+    MORNING_BRIEF.md 等）在各工作区同名，若压平到同一用户级 memory/ 目录，
+    会被 collect 按 mtime「较新者胜出」互相覆盖（7/24、7/30 两次污染事件），
+    再由 distribute 扇回所有工作区 → 全部变成同一份错误内容。
+    因此收集/分发流程严格限定只处理每日日志，项目身份文件由各工作区独立保留。
+    """
+    return bool(_DAILY_RE.match(name))
 
 
 def cleanup_duplicates(dirs: list[Path]) -> int:
@@ -267,6 +290,8 @@ def distribute_user_memory_to_workspaces(bases: list[Path]) -> int:
     for md_file in user_mem.glob("*.md"):
         if not md_file.is_file():
             continue
+        if not is_daily_log(md_file.name):
+            continue  # v3.6: 项目身份文件不得压平/扇出，避免跨工作区互覆污染
         for ws in workspaces:
             ws_mem = ws / ".workbuddy" / "memory"
             ws_mem.mkdir(parents=True, exist_ok=True)
@@ -300,6 +325,8 @@ def collect_workspace_memories_to_user(bases: list[Path]) -> int:
         for md_file in ws_mem.glob("*.md"):
             if not md_file.is_file():
                 continue
+            if not is_daily_log(md_file.name):
+                continue  # v3.6: 项目身份文件不得压平/扇出，避免跨工作区互覆污染
             dest = user_mem / md_file.name
             if not dest.exists() or md_file.stat().st_mtime > dest.stat().st_mtime:
                 shutil.copy2(md_file, dest)

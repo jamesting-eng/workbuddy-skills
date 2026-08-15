@@ -182,12 +182,19 @@ use handoff notes to pass task context between devices.
 
 **The HANDOFF.md file lives at**: `C:\WorkBuddy\_sync\HANDOFF.md`
 
-> ⚠️ **Architecture note (v3.2+, 2026-07)**: `HANDOFF.md` is **NO LONGER a live-shared Junction file**.
-> It syncs across devices via the `sync_identity.py` **transit channel**
-> (`C:\WorkBuddy\_sync\identity\HANDOFF.md`), driven by `watch_sync.py` (single-leader daemon)
-> or an explicit `sync_identity.py push/pull`. The `C:\WorkBuddy` Junction only unifies
-> **workspace paths** — it does NOT live-sync handoff/memory files (that link was confirmed
-> broken in 2026-07 and caused the `-副本` conflict storm). See **Step 6b** below.
+> 📌 **Architecture note (v6 correction, 2026-08)**: the v3.2 claim that "Junction live-sync is
+> broken" was a **misdiagnosis**. `C:\WorkBuddy` (WPS Junction) IS the primary always-on sync
+> channel — the whole tree including hidden `.workbuddy` dirs syncs automatically. What actually
+> happened in July: WPS sync latency + AI forgetting to write logs were mistaken for a broken
+> link. Current architecture is **three layers, each with a job**:
+>
+> 1. **Primary**: WPS Junction auto-sync of `C:\WorkBuddy` (workspace files + memory)
+> 2. **Transit fallback**: `sync_identity.py` via `_sync\identity\` — precise control, forced
+>    push/pull, conflict-copy cleanup, protection against WPS laziness
+> 3. **Daemon**: `watch_sync.py` v2.2 (single-leader) auto-triggers transit pushes ~1-2s after
+>    file changes; self-heals crashes AND blocked/hung states; kept alive by `watchdog.bat` v2
+>
+> HANDOFF.md itself lives on the WPS-shared path AND is mirrored through the transit channel.
 
 ---
 
@@ -278,26 +285,39 @@ Then tell the user what the other computer's AI left for them.
 The `sync-task` skill (installed alongside this skill) implements this workflow automatically.
 If `sync-task` is loaded, it handles the read/generate cycle.
 
-### Step 6b: Ongoing Sync — sync_identity.py + watch_sync.py daemon (v3.2+)
+### Step 6b: Ongoing Sync — three layers (v6)
 
-The HANDOFF.md / identity / workspace-memory files flow across devices through a **transit channel**,
-NOT a live Junction. Two mechanisms:
+The primary sync is the **WPS Junction itself** (auto, always on). The transit channel adds
+precise control and cleanup. Two mechanisms on top:
 
-1. **Daemon (recommended, hands-off)** — `watch_sync.py` runs at startup (via `start_sync.bat` in
-   `shell:startup`). It watches **SOURCE files only** (user-level memory, per-workspace memory,
-   HANDOFF.md / secret.txt / AI_HANDOFF_GUIDE.md) and auto-pushes to the transit dir on change.
-   A **single-leader election** (per-machine heartbeat file) ensures only ONE active machine writes
-   the transit dir at a time — this is what ended the `-副本` conflict storm. It deliberately does
-   NOT watch the transit dir itself, preventing download→push→download loops. Machine-independent
-   (`sys.executable`), safe to run on both computers simultaneously.
+1. **Daemon (recommended, hands-off)** — `watch_sync.py` v2.2 runs at startup (via `watchdog.bat`
+   in `shell:startup`). It watches **SOURCE files only** (user-level memory, per-workspace memory,
+   HANDOFF.md / secret.txt / AI_HANDOFF_GUIDE.md) and auto-pushes to the transit dir on change
+   (~1-2s latency). A **single-leader election** (per-machine heartbeat file) ensures only ONE
+   active machine writes the transit dir at a time — this is what ended the `-副本` conflict
+   storm. It deliberately does NOT watch the transit dir itself, preventing
+   download→push→download loops. Machine-independent (`sys.executable`), safe to run on both
+   computers simultaneously.
+
+   **Self-healing (v2.1)**: process-level try/except (never exits), consecutive-failure counter
+   with baseline rebuild + fallback pull, protected heartbeat thread, PID file.
+   **Hang-healing (v2.2)**: all subprocess calls use `-S` (skips sitecustomize hijack of
+   unlink/rmtree on WPS paths — the root cause of a week-long silent hang); the main loop
+   refreshes `liveness_<machine>.txt` every scan. `watchdog.bat` v2 restarts the daemon if the
+   PID dies **or** liveness is older than 240s (blocked). Use the matched v2 watchdog — an
+   old PID-only watchdog cannot detect a hung process.
 
 2. **Manual push/pull (fallback)** — run `sync_identity.py push` before leaving a computer, and
    `sync_identity.py pull` after arriving at the other. `.bat` wrappers: `push.bat`, `pull.bat`,
    `一键同步.bat`.
 
-The transit directory is `C:\WorkBuddy\_sync\identity\` (synced via WPS cloud as a *managed folder*,
-not as a live Junction of the whole tree). `find_junk.py` / `clean_junk.py` clean up any `-副本`
-conflict files that slip through.
+The transit directory is `C:\WorkBuddy\_sync\identity\`. `find_junk.py` / `clean_junk.py` clean
+up any `-副本` conflict files that slip through. `sync_identity.py` v3.6 **only transits
+`YYYY-MM-DD.md` daily logs** — project identity files (MEMORY.md/STATUS.md/...) stay
+workspace-local to prevent cross-workspace overwrite pollution (7/24 & 7/30 incidents).
+
+> ⚠️ `_sync` is not in the daemon's watch list — script upgrades (watch_sync.py / watchdog.bat)
+> must be **manually copied** to the other machine.
 
 #### Workspace-Level STATUS.md (2026-06-25 — fills the "old workspace blind spot")
 
@@ -652,17 +672,32 @@ The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — onl
 
 ## Resources
 
-### sync_identity.py (v3.5)
+### sync_identity.py (v3.6)
 
 Bidirectional **transit-channel** sync. Collects each workspace's `.workbuddy/memory/` into
 `C:\WorkBuddy\_sync\identity\`, and distributes transit memory back to workspaces on pull.
 Also syncs HANDOFF.md / identity files. v3.4+ auto-cleans WPS `-副本` conflict files and skips
 any file containing "副本" to prevent sync storms; v3.5 sweeps junk before push.
+**v3.6 (critical)**: only `YYYY-MM-DD.md` daily logs may enter the flat user-level namespace;
+project identity files (MEMORY.md / STATUS.md / DAILY_STATUS.md / HOME_WRAPUP.md /
+MORNING_BRIEF.md) are skipped — previously they collided across workspaces and "newest mtime
+wins" merge fanned one workspace's content into ALL workspaces (two incidents: 7/24, 7/30,
+14 workspaces polluted).
 
-### watch_sync.py (v2.0)
+### watch_sync.py (v2.2)
 
-Background daemon with single-leader election. Watches source files, auto-pushes on change.
-Machine-independent (`sys.executable`), safe to run on both computers simultaneously.
+Background daemon with single-leader election. Watches source files, auto-pushes on change
+(~1-2s latency). Machine-independent (`sys.executable`), safe to run on both computers
+simultaneously. v2.1 self-healing: never-exit main loop, failure-counter recovery, PID file.
+v2.2 hang-healing: `-S` on all subprocess calls (defeats sitecustomize hijack of unlink/rmtree
+on WPS paths), plus a `liveness_<machine>.txt` heartbeat refreshed every scan.
+
+### watchdog.bat (v2)
+
+Watchdog loop (30s interval). Restarts the daemon when its PID vanishes (crash/kill/reboot)
+**or** when liveness is older than 240s (main loop blocked while PID alive). Restart command
+uses `-S`. Put it (or a shortcut) in `shell:startup`. Must stay matched with watch_sync.py
+v2.2 — an old PID-only watchdog cannot detect a hung daemon.
 
 ### find_junk.py / clean_junk.py
 

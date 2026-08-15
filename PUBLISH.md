@@ -4,14 +4,22 @@
 
 ---
 
-## 重要修正（v5）
+## 重要修正（v6）
 
-旧版 PUBLISH.md 指导创建**独立仓库** `workbuddy-cross-device-sync`，且误以为技能在
-`cross-device-sync/` 子目录。实际情况：技能文件**平铺在 `workbuddy-skills` 仓库根目录**。所以：
+- 技能文件**平铺在 `workbuddy-skills` 仓库根目录**（不是独立仓库、不是 `cross-device-sync/` 子目录）。
+- v6 新增文件：`watchdog.bat`（看门狗 v2，与 watch_sync.py v2.2 配套）。
+- `sync_identity.py` 升到 v3.6（MEMORY.md 互覆污染根治），`watch_sync.py` 升到 v2.2（卡死自愈）。
+- ⚠️ `_sync/` 目录不在守护进程监听范围：升级脚本后，**必须手动**把新版
+  `watch_sync.py` + `watchdog.bat` 复制到另一台电脑的 `C:\WorkBuddy\_sync\` 同路径。
+- ⚠️ `watchdog.bat` 保持纯 ASCII（或 GBK）编码，UTF-8 中文会 CMD 乱码。
 
-- ❌ 不要新建独立仓库
-- ❌ 不要套一层 `cross-device-sync/` 子目录（仓库根目录即技能根）
-- ✅ 直接把技能文件放进 `workbuddy-skills` 仓库根目录
+## 安全提醒（PAT）
+
+- **不要把 GitHub PAT 贴进任何聊天或提交内容**。一旦泄露立即去 GitHub 撤销
+  （Settings → Developer settings → Personal access tokens）。
+- 推送时如需临时用 PAT：clone URL 里嵌 token → push 完成后立即
+  `git remote set-url origin https://github.com/<user>/workbuddy-skills.git` 剥离。
+- 公司机沙箱无外网时先 `export http_proxy=http://127.0.0.1:7890 && export https_proxy=http://127.0.0.1:7890`（Clash）。
 
 ---
 
@@ -52,7 +60,7 @@ workbuddy-skills/            ← 仓库根目录即技能根
 ├── secret.txt.example
 ├── fix_db_isolation_v3.ps1
 ├── fix_workspace_state_sync.ps1
-├── push.bat / pull.bat / 一键同步.bat / start_sync.bat
+├── push.bat / pull.bat / 一键同步.bat / start_sync.bat / watchdog.bat
 └── scripts/
     ├── fix_paths.py
     └── restore_and_merge.py
@@ -66,7 +74,7 @@ workbuddy-skills/            ← 仓库根目录即技能根
 
 ```powershell
 git add -A
-git commit -m "feat(cross-device-sync): v5 — watch_sync daemon (single-leader), junk cleanup, v3.2 transit channel, portable paths"
+git commit -m "feat(cross-device-sync): v6 — sync_identity v3.6 (MEMORY.md pollution fix), watch_sync v2.2 (hang self-heal), watchdog.bat v2 (liveness check)"
 git push origin main
 ```
 

@@ -8,15 +8,26 @@
 
 **核心痛点**： `workbuddy.db`（SQLite）不能被两台电脑同时读写 — 会导致对话记录互相覆盖。每台电脑的 Windows 用户目录也不同，导致会话文件路径失效。
 
-**解决方案（v5 混合架构）**：
+**解决方案（v6 混合三层架构）**：
 
 - `workbuddy.db` 本地独立（不覆盖）
 - 子目录通过符号链接同步 WPS 云盘
 - 工作区通过 Junction 统一为 `C:\WorkBuddy\`
-- 通过 `sync_identity.py` **中转通道** + `HANDOFF.md` 交接单 + `AI_HANDOFF_GUIDE.md` 实现跨设备任务接续
-- `watch_sync.py` 后台守护进程自动同步（单 leader 选举，根治副本冲突）
+- **主同步 = WPS Junction**：整棵 `C:\WorkBuddy` 树（含隐藏 `.workbuddy`）由 WPS 云盘自动双向同步
+- **中转兜底 = `sync_identity.py`**：经 `_sync/identity/` 精确控制身份文件 / HANDOFF / memory 同步，并清理 WPS 冲突副本
+- **自动守护 = `watch_sync.py` v2.2 + `watchdog.bat`**：文件一变自动 push（单 leader 选举），进程崩溃/卡死自愈
+- 通过 `HANDOFF.md` 交接单 + `AI_HANDOFF_GUIDE.md` 实现跨设备任务接续
 
-> ⚠️ **v3.2 架构修正（重要）**：原计划靠 `C:\WorkBuddy` Junction → WPS 云盘直传 HANDOFF.md，**2026-07 实测该链路失效**。现改为 `sync_identity.py` 中转通道（经 `_sync/identity/` 子目录）同步 HANDOFF.md / 身份文件 / 工作区 memory。本文档与旧版 README 中"Junction 直传"相关描述均已作废。
+> 📌 **架构勘误（v6）**：v3.2 曾断言「Junction 直传失效，一切改走中转」。**7 月实测证明该结论是误诊**——`C:\WorkBuddy` Junction 一直是正常工作的主同步通道（所谓"失效"实为 WPS 同步延迟 + AI 未写日志的人为遗漏）。正确认知是**三层并存、各司其职**：WPS Junction 主同步、中转通道兜底与精确控制、守护进程让中转实时化。中转通道仍保留：它是清理冲突副本、强制对齐、防 WPS 偷懒的必要工具。
+
+## v6 更新了什么（相对 v5）
+
+| 变更 | 说明 |
+|------|------|
+| `sync_identity.py` v3.5 → **v3.6** | **根治 MEMORY.md 跨工作区互覆污染**：collect/distribute 仅允许 `YYYY-MM-DD.md` 每日日志进入扁平用户级命名空间；项目身份文件（MEMORY.md/STATUS.md/DAILY_STATUS.md 等）一律跳过，不再被「mtime 较新者胜出」合并后扇回所有工作区（7/24、7/30 两次事故，14 个工作区 MEMORY.md 被同一份内容覆盖） |
+| `watch_sync.py` v2.0 → **v2.2** | v2.1 自愈：主循环外套 try/except 永不退出、连续失败自动重建基线+兜底 pull、PID 文件、心跳线程保护；v2.2 卡死自愈：子进程全部带 `-S`（跳过 sitecustomize 对 WPS 路径 unlink/rmtree 的劫持——7/13 起静默僵死一周的根因）、主循环每轮更新 `liveness_<机器名>.txt` 活性信号 |
+| **新增 `watchdog.bat`（v2）** | 看门狗：PID 不存在（崩溃/被杀）**或** liveness 超 240s 未更新（主循环 blocked）→ 任一成立即强杀重启；重启命令带 `-S`。放 `shell:startup` 获得机器重启级自愈 |
+| `AI_HANDOFF_GUIDE.md` 重写 | 修正三层架构认知；新增「新工作区硬约束」（第一步必建 `.workbuddy/memory/STATUS.md` + 当日日志）与「收尾检查清单」；响应延迟如实标注 1-2s |
 
 ## 目录结构
 
@@ -27,8 +38,9 @@
 ├── README.md                         # 本文件
 ├── PUBLISH.md                        # GitHub 发布指南
 ├── AI_HANDOFF_GUIDE.md               # AI 跨设备交接操作指南（两台 AI 共读）
-├── sync_identity.py                  # 用户身份 & 记忆 & HANDOFF 中转同步脚本（v3.5）
-├── watch_sync.py                     # 自动同步守护进程（单 leader 选举，v2.0）
+├── sync_identity.py                  # 用户身份 & 记忆 & HANDOFF 中转同步脚本（v3.6）
+├── watch_sync.py                     # 自动同步守护进程（v2.2：单 leader + 自愈 + 卡死自愈）
+├── watchdog.bat                      # 看门狗（崩溃重启 + liveness 卡死强杀，放 shell:startup）
 ├── find_junk.py                      # WPS 冲突副本扫描器（生成 HTML 报告）
 ├── clean_junk.py                     # WPS 冲突副本清理器（双保险，只删有正本的）
 ├── workspace_sync.py                 # 机械同步脚本（DB 修复 + 交接单机器区生成）
@@ -38,31 +50,11 @@
 ├── push.bat                          # 离开电脑前一键推送（handoff + verify）
 ├── pull.bat                          # 到另一台电脑一键拉取校验
 ├── 一键同步.bat                       # 拉取 + 启动守护进程
-├── start_sync.bat                    # 守护进程开机自启（放 shell:startup）
+├── start_sync.bat                    # 守护进程启动器（拉起 watchdog 链）
 └── scripts/
     ├── fix_paths.py                  # 路径修复脚本（四步，来自 v4）
     └── restore_and_merge.py          # 会话恢复 & 合并工具（来自 v4）
 ```
-
-## 它能做什么
-
-| 功能 | 说明 |
-|------|------|
-| **混合架构同步** | `workbuddy.db` 本地独立（不怕覆盖），子目录/工作区同步 WPS 云盘 |
-| **中转通道同步** | `sync_identity.py` 经 `_sync/identity/` 中转 HANDOFF.md / 身份 / memory（v3.2 权威通道） |
-| **数据库隔离** | `fix_db_isolation_v3.ps1` 一键将 `.workbuddy` 从云端 symlink 转为本地目录 |
-| **workspace-state 同步** | 新建工作区自动出现在另一台电脑侧边栏 |
-| **HANDOFF.md v2 交接单** | 结构化交接单，分机器生成区 + AI 手写区，含对话摘要导出、同步暗号验证 |
-| **对话导出** | 重要对话全文导出到 `_sync/conversations/`，另一台电脑可读取完整上下文 |
-| **AI 操作指南** | `AI_HANDOFF_GUIDE.md` 详细规定两台 AI 的推送/拉取行为，防止遗漏 |
-| **自动同步守护进程** | `watch_sync.py` 后台常驻，文件一改自动 push；单 leader 选举避免双机并发写 → 根治副本冲突风暴 |
-| **垃圾清理** | `find_junk.py` / `clean_junk.py` 扫描并清理 WPS 产生的 `-副本` 冲突文件 |
-| **路径修复** | 自动修复 JSON session 文件、SQLite 数据库、项目缓存中的路径引用 |
-| **缓存合并** | 路径迁移后，自动合并分裂的项目缓存，防止「对话消息消失」 |
-| **会话恢复** | 消息缓存丢失时，基于云端摘要 + 项目产出重建可用的会话上下文 |
-| **会话合并** | 把分散在多个会话中的相关讨论合并到一个对话中，自动去重、按时间排序 |
-| **WAL 强制刷盘** | 关闭前确保 SQLite WAL 数据写入主数据库，避免数据丢失 |
-| **用户身份 & 记忆同步** | `sync_identity.py` 通过 `_sync/identity/` 中转，同步 `~/.workbuddy/memory/` 等用户级文件 |
 
 ## 前置条件
 
@@ -75,7 +67,7 @@
 
 ### 1. 配置同步（每台电脑各运行一次，约 15 分钟）
 
-```
+```powershell
 # ① 数据库隔离：把 workbuddy.db 从云盘分离到本地
 .\fix_db_isolation_v3.ps1
 
@@ -96,16 +88,22 @@ python scripts/fix_paths.py
 
 脚本会自动完成四步：JSON 修复 → 数据库修复 → 项目缓存合并 → JSONL cwd 路径修复。
 
-### 3. 启动自动同步守护进程
+### 3. 启动自动同步守护进程（v6 推荐 watchdog.bat）
 
 ```
-# 开机自启（推荐）：把 start_sync.bat 放进 shell:startup
-# 或手动启动一次：
-python watch_sync.py            # 常驻守护（单 leader 模式安全）
-python watch_sync.py --status   # 查看监听状态 + leader 状态
+# 开机自启（推荐）：把 watchdog.bat 放进 shell:startup（Win+R → shell:startup）
+# 它会拉起 watch_sync.py 并持续守护：
+#   - 进程不存在（崩溃/被杀/机器重启）→ 30s 内重启
+#   - liveness_<机器名>.txt 超 240s 未更新（主循环卡死）→ 强杀重启
+# 手动启动一次：
+python -S watch_sync.py            # 常驻守护（单 leader 模式安全；-S 跳过 sitecustomize）
+python -S watch_sync.py --status   # 查看监听状态 + leader 状态 + liveness 阈值
+python -S watch_sync.py --once     # 跑一次同步就退出
 ```
 
-守护进程会在后台监听源文件变化并自动 push；单 leader 选举确保同一时间只有一台机器写中转目录，根治 WPS 副本冲突风暴。
+> ⚠️ **务必用配套的 v2 版 `watchdog.bat`**。旧版只查 PID 存活，检测不了「进程活着但 blocked」的卡死（这正是 7/13 起静默死一周的真因）。注意 `_sync` 目录不在自动同步范围，升级时需手动把新版 `watch_sync.py` + `watchdog.bat` 复制到另一台电脑同路径。
+
+守护进程会在后台监听源文件变化（扫描 1s + 防抖 1s ≈ 1-2 秒延迟）并自动 push；单 leader 选举确保同一时间只有一台机器写中转目录，根治 WPS 副本冲突风暴。
 
 ### 4. 使用交接单（跨设备任务接续）
 
@@ -121,26 +119,40 @@ python watch_sync.py --status   # 查看监听状态 + leader 状态
 - 展示上一次的工作状态和上下文
 - 无缝接续任务
 
-> ⚠️ **重要**：v3.2 起，HANDOFF.md 等通过 `sync_identity.py` 中转通道同步，**不再依赖 Junction 直传**。中转目录为 `C:\WorkBuddy\_sync\identity\`。
+> ⚠️ **WPS 同步会"偷懒"**：空目录 ≠ 没做。WPS 客户端有同步延迟，判断另一台机器是否有产出，必须交叉核对 `_sync/` 交接报告 + 对方机器实际路径，不能只看本地目录。
 
 ## 注意事项 & 踩过的坑
 
-坑 | 现象 | 原因 | 解决
----|------|------|------
-**db 被同步覆盖** | 公司电脑对话消失，家里对话出现在公司 | `workbuddy.db` 在 WPS 云盘里被两台电脑共享 | 运行 `fix_db_isolation_v3.ps1`（v3 架构核心）
-**新建工作区不显示** | 公司建的工作区，家里侧边栏没有 | `workspace-state.json` 是本地文件未同步 | 运行 `fix_workspace_state_sync.ps1`
-**WAL 未刷盘** | 关闭后最新对话丢失 | WorkBuddy 没完全退出，WAL 文件残留 | 确认进程完全退出，WAL 文件消失
-**workspace-state.json 为空** | 侧边栏只显示1个工作区 | WPS 同步了旧版本或客户端覆盖了 | 从 DB 重建 workspace-state.json
-**会话被软删除** | DB 有记录但侧边栏看不到 | WorkBuddy 客户端同步时标记 deleted_at | `UPDATE sessions SET deleted_at = NULL`
-**缺少 .workbuddy 标记** | 工作区目录存在但 sidebar 不显示 | 目录缺少 `.workbuddy/memory/` 子目录 | 手动创建标记目录
-**路径分隔符** | 恢复的会话不在列表显示 | cwd 用了 `C:/...` 正斜杠 | 必须用 `C:\...` 反斜杠
-**user_id** | 同上 | 数据库里填了 `"default"` | 必须用真实 UUID
-**时间戳年份** | 显示「56年前」且内容不渲染 | `created_at=0` 或秒级而非毫秒级 | 确保毫秒级
-**对话消失** | 路径修复后历史消息没了 | 项目缓存因路径变更分裂成两份 | `fix_paths.py` 第三步自动合并
-**deliver_attachments 静默失败** | 发送的文件对方收不到 | `~/.workbuddy/` 是 symlink 路径 | 先 `cp` 到 `C:\WorkBuddy\` 再 delivery
-**AI 不知道读交接单** | 换电脑后 AI 说"已经同步好了"但看不到上下文 | AI 没有被指示要先读 HANDOFF.md | 更新 SKILL.md 强制规则（v4 已修复）
-**Junction 直传失效** | HANDOFF.md 跨设备不同步 | 2026-07 确认 WPS Junction 链路失效 | v3.2 改走 `sync_identity.py` 中转通道
-**WPS 副本冲突风暴** | 几千个 `-副本` 文件 | 两台电脑同时写同一 WPS 路径 | `watch_sync.py` 单 leader 选举 + `find_junk.py`/`clean_junk.py` 清理 |
+| 坑 | 现象 | 原因 | 解决 |
+|----|------|------|------|
+| **db 被同步覆盖** | 公司电脑对话消失，家里对话出现在公司 | `workbuddy.db` 在 WPS 云盘里被两台电脑共享 | 运行 `fix_db_isolation_v3.ps1`（v3 架构核心） |
+| **新建工作区不显示** | 公司建的工作区，家里侧边栏没有 | `workspace-state.json` 是本地文件未同步 | 运行 `fix_workspace_state_sync.ps1` |
+| **WAL 未刷盘** | 关闭后最新对话丢失 | WorkBuddy 没完全退出，WAL 文件残留 | 确认进程完全退出，WAL 文件消失 |
+| **workspace-state.json 为空** | 侧边栏只显示1个工作区 | WPS 同步了旧版本或客户端覆盖了 | 从 DB 重建 workspace-state.json |
+| **会话被软删除** | DB 有记录但侧边栏看不到 | WorkBuddy 客户端同步时标记 deleted_at | `UPDATE sessions SET deleted_at = NULL` |
+| **缺少 .workbuddy 标记** | 工作区目录存在但 sidebar 不显示 | 目录缺少 `.workbuddy/memory/` 子目录 | 手动创建标记目录（新工作区第一步就建） |
+| **路径分隔符** | 恢复的会话不在列表显示 | cwd 用了 `C:/...` 正斜杠 | 必须用 `C:\...` 反斜杠 |
+| **user_id** | 同上 | 数据库里填了 `"default"` | 必须用真实 UUID |
+| **时间戳年份** | 显示「56年前」且内容不渲染 | `created_at=0` 或秒级而非毫秒级 | 确保毫秒级 |
+| **对话消失** | 路径修复后历史消息没了 | 项目缓存因路径变更分裂成两份 | `fix_paths.py` 第三步自动合并 |
+| **deliver_attachments 静默失败** | 发送的文件对方收不到 | `~/.workbuddy/` 是 symlink 路径 | 先 `cp` 到 `C:\WorkBuddy\` 再 delivery |
+| **AI 不知道读交接单** | 换电脑后 AI 说"已经同步好了"但看不到上下文 | AI 没有被指示要先读 HANDOFF.md | 更新 SKILL.md 强制规则（v4 已修复） |
+| **WPS 副本冲突风暴** | 几千个 `-副本` 文件 | 两台电脑同时写同一 WPS 路径 | `watch_sync.py` 单 leader 选举 + `find_junk.py`/`clean_junk.py` 清理 |
+| **守护进程静默死一周** | 7/7、7/13 两次，中转同步停摆无告警 | ① sync 超时异常未捕获直接退出；② sitecustomize 劫持 WPS 路径 unlink/rmtree 成永不返回的回收站子进程 → 主进程 blocked 但 PID 还在 | v2.1 进程级自愈 + v2.2 子进程全带 `-S`；看门狗查 liveness（不只 PID） |
+| **看门狗检测不到卡死** | 进程活着但僵死，看门狗永不重启 | 旧 watchdog.bat 只 `tasklist` 查 PID | v2 版 watchdog.bat：liveness 超 240s → 强杀重启 |
+| **MEMORY.md 跨工作区互覆污染** | 14 个工作区的 MEMORY.md 变成同一份内容（7/24、7/30 两次事故） | collect/distribute 把各工作区同名 MEMORY.md 压平到同一用户级命名空间，mtime 较新者胜出，再扇回所有工作区 | **v3.6**：身份文件不进扁平中转，仅 `YYYY-MM-DD.md` 每日日志走中转 |
+| **每日日志同名残留风险** | 某工作区日志被扇出到多个工作区（7/11 NESPA 日志扇出 8 个区） | `YYYY-MM-DD.md` 跨工作区同名仍会互相覆盖 | **已知未修**：如需彻底隔离需按工作区命名空间化（更大重构） |
+| **.bat 中文乱码** | CMD 里中文变乱码 | bat 文件存成了 UTF-8 | 含中文的 .bat 必须 GBK 编码；纯 ASCII 内容则任何编码都安全 |
+| **沙箱无法测 .bat** | AI 沙箱里 `cmd /c`、`Start-Process cmd` 被禁 | WorkBuddy 沙箱安全策略 | .bat 只能在真机验证；沙箱内用直接拉起 python 进程的方式模拟验证 |
+| **WPS 同步偷懒** | 公司机文件家里看不到，误判"没做" | WPS 客户端同步延迟/不彻底 | 手动刷新几次；跨机判空必须交叉核对 `_sync/` 交接报告 + 对方实际路径 |
+| **跨机归因错误** | 把公司机 sync 过来的工作算成"家里做的" | WPS 会静默镜像工作产物 | 写收尾前按「分区约定」给每条工作判机器来源（provenance） |
+
+## 运维约定（建议）
+
+- **AI 分区**：两台电脑各只做一个项目（如家里=个人项目、公司=工作项目），避免同一事项跨机讨论导致记忆混乱
+- **新工作区硬约束**：建区第一步就建 `.workbuddy/memory/STATUS.md` + 当日日志，否则叙事日志会断层
+- **收尾铁律**：AI 若发现某工作区"空"，禁止直接判"无产出"，先交叉核对交接报告再下结论
+- **暗号**：`secret.txt` 每次拉取后验证一致；**不要在聊天/文档中提交真值**
 
 ## 常见问题
 
@@ -164,19 +176,23 @@ python watch_sync.py --status   # 查看监听状态 + leader 状态
 
 目前脚本仅支持 Windows（依赖 PowerShell 的 Junction 和 `C:\` 路径约定）。Mac 用户可以手动创建符号链接并修改脚本中的路径格式。欢迎 PR。
 
-**Q: 交接单机制靠谱吗？**
+**Q: 守护进程挂了怎么办？**
 
-交接单（ `HANDOFF.md`）通过 `sync_identity.py` 中转通道（经 `C:\WorkBuddy\_sync\identity\`），是两台电脑的 AI 之间可靠的共享信息通道。v2 版本加入了机器生成区 + AI 手写区分离、对话摘要导出、同步暗号验证；v3.2 起改为中转通道同步，v5 加入自动同步守护进程。详见 `AI_HANDOFF_GUIDE.md`。
+v2.2 + watchdog.bat v2 的组合下：崩溃 30s 内自动重启、卡死（liveness 超 240s）自动强杀重启、机器重启由 shell:startup 兜底。手动检查：`python -S watch_sync.py --status`；看日志：`_sync/watch_sync.log`。
 
 **Q: 出现大量 `-副本` 文件怎么办？**
 
-用 `python find_junk.py` 扫描并生成报告，确认每个副本都有正本后，用 `python clean_junk.py --execute` 清理。当前 v5 单 leader 机制已阻止新副本产生，这是一次性清理。
+用 `python find_junk.py` 扫描并生成报告，确认每个副本都有正本后，用 `python clean_junk.py --execute` 清理。当前单 leader 机制已阻止新副本产生，这是一次性清理。
+
+**Q: MEMORY.md 被污染了怎么恢复？**
+
+v3.6 已阻止再次发生。已被覆盖的文件：中转目录和同步命名空间里都没有干净备份，需回到对应工作区，靠对话历史/项目产出**手动针对性重建**（不要让 AI 批量自动重建，容易把污染内容再写回去）。
 
 ## 安装为 WorkBuddy 技能
 
 1. 克隆本仓库到本地：
 
-```powershell
+```
 git clone https://github.com/<你的GitHub用户名>/workbuddy-skills.git
 ```
 
