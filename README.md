@@ -1,4 +1,4 @@
-# Cross-Device Sync for WorkBuddy
+# Cross-Device Sync for WorkBuddy / CodeBuddy
 
 让 WorkBuddy 在多台 Windows 电脑之间无缝同步 — 在公司创建的对话，回家继续；家里的任务，公司接着干。
 
@@ -36,6 +36,8 @@
 
 ├── SKILL.md                          # 技能定义 & 完整操作指南
 ├── README.md                         # 本文件
+├── LICENSE                           # MIT
+├── .gitignore                        # 排除 secret.txt / 运行日志 / PID 等本地产物
 ├── PUBLISH.md                        # GitHub 发布指南
 ├── AI_HANDOFF_GUIDE.md               # AI 跨设备交接操作指南（两台 AI 共读）
 ├── sync_identity.py                  # 用户身份 & 记忆 & HANDOFF 中转同步脚本（v3.6）
@@ -193,8 +195,10 @@ v3.6 已阻止再次发生。已被覆盖的文件：中转目录和同步命名
 1. 克隆本仓库到本地：
 
 ```
-git clone https://github.com/<你的GitHub用户名>/workbuddy-skills.git
+git clone https://github.com/jamesting-eng/workbuddy-skills.git
 ```
+
+> 如果你 fork 了本仓库，clone 时把 `jamesting-eng` 换成你自己的 GitHub 用户名即可。
 
 2. 把仓库根目录的全部文件复制进 WorkBuddy 用户技能目录：
 

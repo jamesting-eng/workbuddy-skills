@@ -80,10 +80,23 @@ git push origin main
 
 ---
 
-## 第四步：仓库信息（GitHub 网页，可选）
+## 第四步：仓库信息（GitHub 网页，API 改不了，只能手动点一次）
 
-- 确认仓库 Description：`🔄 Hybrid cross-device sync for WorkBuddy`
-- Topics 可加：`workbuddy cross-device sync windows wps-cloud session-recovery python devtools`
+1. 打开 https://github.com/jamesting-eng/workbuddy-skills
+2. 右上角 About 区域 → 铅笔图标 ✏️
+3. Description 填：
+
+```
+让 WorkBuddy / CodeBuddy 在多台 Windows 电脑之间无缝同步 — WPS 云盘中转 + 交接单 + 自动守护进程
+```
+
+4. 同一弹窗 Topics 逐个输入回车：
+
+```
+codebuddy  workbuddy  cross-device-sync  wps-cloud  sqlite  windows
+```
+
+> 效果：别人搜 `codebuddy` / `workbuddy` / `sync` 能命中本仓库；搜索结果一眼看懂用途。
 
 ---
 
