@@ -107,24 +107,43 @@ codebuddy  workbuddy  cross-device-sync  wps-cloud  sqlite  windows
 
 ---
 
-## 第五步：发布到 SkillHub（可选，让 WorkBuddy 用户搜到）
+## 第五步：发布到 SkillHub（推荐 CLI 通道，已实测跑通）
 
-```powershell
-# ① 打包（自动校验 manifest.yaml / SKILL.md frontmatter；发现 secret.txt 会拒绝打包）：
-python package.py        # 生成 dist\cross-device-sync-<version>.zip
+### 一次性准备
 
-# ② 上传（二选一）：
-#    网页：skillhub.cn → 右上角「发布 Skill」→ 上传 zip → 填名称/描述/分类
-#    客户端：WorkBuddy → Skill 管理 → 「发布到 SkillHub」
+1. skillhub.cn 注册 + 实名认证，个人中心创建 API Token（`skh_...`）
+2. 拿 CLI（单文件 Python，无需安装）：
+   ```bash
+   curl -fsSL https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com/install/latest.tar.gz | tar -xz
+   # 解出 cli/skills_store_cli.py，用本机 python 直接跑
+   ```
+3. SKILL.md frontmatter 补 SkillHub 必填字段：`slug` / `displayName` / `version` / `summary` / `tags` / `license`
 
-# ③ 等平台安全审核（1-3 工作日），通过后在技能列表点「上架」
+### 发布流程（Windows 记得 `export PYTHONIOENCODING=utf-8` 防 GBK 编码错）
+
+```bash
+python skills_store_cli.py login --key skh_你的Token --host https://api.skillhub.cn
+python skills_store_cli.py publish ./发布目录 --dry-run     # 预检
+python skills_store_cli.py publish ./发布目录 --changelog "..." --json
+# 成功返回 ok:true + skillId，reviewStatus=pending 等审核（1-7 个工作日）
 ```
 
-注意：
+### ⚠️ 平台文件类型白名单（实测被拒过的）
 
-- **版本号要改两处保持一致**：`manifest.yaml` 的 `version:` 和 `package.py` 顶部的 `VERSION`（package.py 会校验，不一致直接拒打包）。
-- SKILL.md 的「Why This Skill Needs Elevated Access」章节是给审核员看的权限用途说明，**不要删**。
-- 描述里写明「每台电脑需 ~15 分钟配置（Junction + 数据库隔离）」，管理用户预期。
+| 被拒文件 | 处理 |
+|---|---|
+| `.gitignore` | 发布目录剔除（仓库工件，不进技能包） |
+| `LICENSE`（无扩展名） | 改名 `LICENSE.txt`（仅发布目录，GitHub 仓库保持无扩展名以被识别） |
+| `secret.txt.example` | 改名 `secret-example.txt`，同步改文档引用 |
+| **所有 `.bat`** | 剔除；看门狗用 **`watchdog.py`**（watchdog.bat 的 Python 移植版）替代，其余 bat 用 python 等价命令（README 里有说明段） |
+
+`.py` / `.md` / `.ps1` / `.yaml` / `.txt` 实测可过。`dist/cross-device-sync/` 是当前合规的发布目录样板。
+
+### 发布后
+
+- 监控：开发者后台「我的技能」看审核状态（安全扫描 → 内容审核 → 上架）
+- 被拒会附理由，改完重新 publish 即可
+- 迭代版本：改 `manifest.yaml` 和 SKILL.md 的 version 后重新 publish
 
 ## 以后更新
 

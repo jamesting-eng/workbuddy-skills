@@ -1,5 +1,16 @@
 ---
 name: cross-device-sync
+slug: cross-device-sync
+displayName: Cross-Device Sync for WorkBuddy
+version: "6.0.0"
+summary: 让 WorkBuddy 在多台 Windows 电脑之间无缝同步（WPS 云盘 + 交接单 + 自动守护进程）
+license: MIT
+tags:
+  - workbuddy
+  - codebuddy
+  - cross-device-sync
+  - wps-cloud
+  - windows
 description: |
   Configure WorkBuddy for seamless synchronization across multiple Windows computers
   via WPS cloud drive (金山文档/WPS云盘). This skill should be used when the user wants
@@ -8,7 +19,9 @@ description: |
   usernames, or unify session paths across devices. Triggers include phrases like
   "cross-device sync", "跨设备同步", "sync WorkBuddy", "sync across computers",
   "can't open old tasks on another computer", "workspace renamed or deleted error".
+  每台电脑需约 15 分钟一次性配置（Junction + 数据库隔离 + 路径修复），之后全自动同步。
 agent_created: true
+homepage: https://github.com/jamesting-eng/workbuddy-skills
 ---
 
 # Cross-Device Sync
