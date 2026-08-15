@@ -80,7 +80,7 @@ git push origin main
 
 ---
 
-## 第四步：仓库信息（GitHub 网页，API 改不了，只能手动点一次）
+## 第四步：仓库信息（GitHub 网页，API 改不了，只能手动点一次）✅ 已完成（2026-08-15），无需再操作
 
 1. 打开 https://github.com/jamesting-eng/workbuddy-skills
 2. 右上角 About 区域 → 铅笔图标 ✏️
@@ -145,7 +145,31 @@ python skills_store_cli.py publish ./发布目录 --changelog "..." --json
 - 被拒会附理由，改完重新 publish 即可
 - 迭代版本：改 `manifest.yaml` 和 SKILL.md 的 version 后重新 publish
 
-## 以后更新
+## 以后更新（铁律：GitHub 与 SkillHub 双端同步发版）
 
-改完本地 `_sync` 里的脚本后，把变更同步到 `workbuddy-skills` 仓库根目录再：
-`git add` → `git commit` → `git push`。
+> **版本必须一致**：任何一次版本更新，GitHub 和 SkillHub 都要发，且版本号相同。
+> 只发一边 = 未完成发版。GitHub About/Topics 已配置（2026-08-15），无需重复操作。
+
+### 双发清单（按顺序执行）
+
+1. **改版本号（两处必须同值）**：`manifest.yaml` 的 `version` + `SKILL.md` frontmatter 的 `version`
+2. **更新发布目录**：把变更文件同步到 `dist/cross-device-sync/`（注意白名单：无 `.bat`、`LICENSE.txt`、`secret-example.txt`）
+3. **GitHub 端**：
+   ```powershell
+   git add -A
+   git commit -m "feat(cross-device-sync): vX.Y — 一句话变更说明"
+   git push origin main   # 家里机需先挂 Clash 代理；PAT 用一次废一次
+   ```
+4. **SkillHub 端**（CLI 已 login 的前提下）：
+   ```bash
+   export PYTHONIOENCODING=utf-8
+   python skills_store_cli.py publish ./dist/cross-device-sync --changelog "..." --json
+   ```
+5. **核对**：GitHub 仓库页面版本 = SkillHub 后台「我的技能」版本 = `manifest.yaml` 版本，三者一致才算发完
+6. 若 SkillHub 审核被拒：按理由修改后重新 publish，**GitHub 端同步补 commit**（如修复文档/白名单问题），保持两端内容一致
+
+### 历史发版记录
+
+| 版本 | 日期 | GitHub commit | SkillHub |
+|---|---|---|---|
+| 6.0.0 | 2026-08-15 | `71a0569` | skillId=156632 / versionId=238390，审核 pending |
