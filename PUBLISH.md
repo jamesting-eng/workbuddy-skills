@@ -107,6 +107,25 @@ codebuddy  workbuddy  cross-device-sync  wps-cloud  sqlite  windows
 
 ---
 
+## 第五步：发布到 SkillHub（可选，让 WorkBuddy 用户搜到）
+
+```powershell
+# ① 打包（自动校验 manifest.yaml / SKILL.md frontmatter；发现 secret.txt 会拒绝打包）：
+python package.py        # 生成 dist\cross-device-sync-<version>.zip
+
+# ② 上传（二选一）：
+#    网页：skillhub.cn → 右上角「发布 Skill」→ 上传 zip → 填名称/描述/分类
+#    客户端：WorkBuddy → Skill 管理 → 「发布到 SkillHub」
+
+# ③ 等平台安全审核（1-3 工作日），通过后在技能列表点「上架」
+```
+
+注意：
+
+- **版本号要改两处保持一致**：`manifest.yaml` 的 `version:` 和 `package.py` 顶部的 `VERSION`（package.py 会校验，不一致直接拒打包）。
+- SKILL.md 的「Why This Skill Needs Elevated Access」章节是给审核员看的权限用途说明，**不要删**。
+- 描述里写明「每台电脑需 ~15 分钟配置（Junction + 数据库隔离）」，管理用户预期。
+
 ## 以后更新
 
 改完本地 `_sync` 里的脚本后，把变更同步到 `workbuddy-skills` 仓库根目录再：

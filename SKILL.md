@@ -36,6 +36,26 @@ which breaks session references when switching devices.
 - Administrator access on both computers (required for creating Junctions)
 - PowerShell 5.1+ on both computers
 
+## Why This Skill Needs Elevated Access (for platform review)
+
+This skill operates **entirely on the user's local machines** — no network calls,
+no telemetry, no external services. The PowerShell scripts, Python daemons and
+elevated operations exist for exactly these reasons:
+
+| Operation | Why it is needed |
+|-----------|------------------|
+| Administrator / `New-Item -ItemType Junction` | Creates `C:\WorkBuddy` as a Junction pointing into the WPS cloud folder so both computers share one canonical workspace path (Windows username differs per machine) |
+| `fix_db_isolation_v3.ps1` | Moves `workbuddy.db` (SQLite) OUT of the cloud-synced folder to a local dir — prevents two computers from overwriting each other's conversation DB. Read/modify local WorkBuddy app data only |
+| `fix_workspace_state_sync.ps1` | Symlinks `workspace-state.json` (a few KB) so newly created workspaces appear in the other computer's sidebar |
+| `scripts/fix_paths.py` | Rewrites stale `C:\Users\<old-name>` path references in the user's own session JSON / SQLite / caches after the path unification |
+| `watch_sync.py` daemon | Local file watcher (stdlib only, polling mtime). Watches the user's own memory/handoff files and copies them into a transit folder when they change. Single-leader election via local heartbeat files avoids concurrent writes. No network I/O |
+| `watchdog.bat` | Restarts the local daemon if it crashes or hangs (checks a local PID file and a liveness file). Runs at user logon via `shell:startup` |
+| `secret.txt.example` | Template for a user-chosen sync passcode to verify both machines see the same shared folder. The real `secret.txt` is deliberately excluded from git and from the packaged zip (enforced by `package.py`) |
+
+Nothing here reads credentials, browses the network, or modifies anything outside
+the user's own WorkBuddy / WPS directories. All deletions (`clean_junk.py`) target
+WPS conflict-copy files (`-副本*`) only, and only when a pristine original exists.
+
 ## Workflow
 
 ### Step 1: Identify Cloud Drive Path

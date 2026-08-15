@@ -39,6 +39,8 @@
 ├── LICENSE                           # MIT
 ├── .gitignore                        # 排除 secret.txt / 运行日志 / PID 等本地产物
 ├── PUBLISH.md                        # GitHub 发布指南
+├── manifest.yaml                     # SkillHub 技能元数据（打包必填）
+├── package.py                        # 一键打包 SkillHub 规范 zip（自动校验+排除敏感文件）
 ├── AI_HANDOFF_GUIDE.md               # AI 跨设备交接操作指南（两台 AI 共读）
 ├── sync_identity.py                  # 用户身份 & 记忆 & HANDOFF 中转同步脚本（v3.6）
 ├── watch_sync.py                     # 自动同步守护进程（v2.2：单 leader + 自愈 + 卡死自愈）
@@ -211,6 +213,21 @@ git clone https://github.com/jamesting-eng/workbuddy-skills.git
 3. 在 WorkBuddy 对话中直接说「跨设备同步」或「帮我在多台电脑间同步 WorkBuddy」即可自动触发此技能。
 
 > 技能文件位于仓库根目录（不是 `cross-device-sync/` 子目录）。安装时把根目录内容对应放入 `~/.workbuddy/skills/cross-device-sync/` 即可。
+
+## 发布到 SkillHub 技能市场（可选）
+
+```powershell
+# ① 打包（自动校验 manifest/SKILL.md，拒绝打包含 secret.txt 的目录）：
+python package.py        # 生成 dist\cross-device-sync-<version>.zip
+
+# ② 上传（二选一）：
+#    网页：skillhub.cn → 右上角「发布 Skill」→ 上传 zip → 填名称/描述/分类 → 提交审核
+#    客户端：WorkBuddy → Skill 管理 → 「发布到 SkillHub」
+# ③ 审核通过后在技能列表点「上架」，用户即可在 WorkBuddy 内搜索安装
+```
+
+> ⚠️ 本技能含本地脚本（PowerShell/Junction/守护进程），审核会重点看权限用途——SKILL.md 的
+> 「Why This Skill Needs Elevated Access」章节已逐项说明，勿删。
 
 ## 许可
 
