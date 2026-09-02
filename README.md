@@ -4,6 +4,8 @@
 
 ## 这是什么？
 
+> ℹ **已知问题（WorkBuddy 5.4.7）**：安装了 `5.4.7.37521366` 的用户会出现**对话正文重启即丢**（侧边栏列表在、点进去没内容）。该问题不影响本技能——本技能是**磁盘为基础**的（HANDOFF.md / STATUS.md / 日志 / 交接单），反而是该时期唯一可靠的工作继续手段。应急处置流程见 `SKILL.md` 的 **Emergency Persistence: 5.4.7 IndexedDB Loss Era SOP** 章节。
+
 一个 [WorkBuddy](https://www.codebuddy.cn) 技能，解决多台 Windows 电脑之间 WorkBuddy 数据的同步问题。
 
 **核心痛点**： `workbuddy.db`（SQLite）不能被两台电脑同时读写 — 会导致对话记录互相覆盖。每台电脑的 Windows 用户目录也不同，导致会话文件路径失效。
@@ -55,6 +57,9 @@
 ├── pull.bat                          # 到另一台电脑一键拉取校验
 ├── 一键同步.bat                       # 拉取 + 启动守护进程
 ├── start_sync.bat                    # 守护进程启动器（拉起 watchdog 链）
+├── sync_cli.py                       # 统一入口：双击=菜单 / pull / push / sync / verify
+│                                     #   status / start / stop / startup-install（开机自启）
+│                                     #   替代 4 个 .bat（发布渠道拒收 .bat）
 └── scripts/
     ├── fix_paths.py                  # 路径修复脚本（四步，来自 v4）
     └── restore_and_merge.py          # 会话恢复 & 合并工具（来自 v4）

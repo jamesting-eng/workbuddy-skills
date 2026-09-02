@@ -193,4 +193,36 @@ C:\WorkBuddy\                       ← 家里/公司都是 WPS 云盘的 Juncti
 
 ---
 
+---
+
+## ⚠️ 5.4.7 IndexedDB Loss Era 补充说明（2026-09 起）
+
+> 适用范围：安装 WorkBuddy `5.4.7.37521366` 后，**对话正文重启即丢**（侧边栏有会话、点进去没内容）。根因是 Chromium IndexedDB 子系统在 `app/session` 下未初始化，消息只落内存。**与 WPS 上云无关**，本地无法修复，等官方热更。
+
+### 本指南在该时期反而更关键
+
+- 对话上下文不可信，**磁盘才是事实来源**。
+- 本指南的全部机制（HANDOFF.md / STATUS.md / 日志 / 中转通道）都是磁盘写入，**不受 IndexedDB 回归影响**。
+- 所以：该时期**不要停用本技能**，而是要执行得更加严格。
+
+### 推送侧（离开电脑前）
+
+1. 先把本次对话的关键决策 / 交付内容写入 `<workspace>/.workbuddy/memory/YYYY-MM-DD.md` 和 `STATUS.md`
+2. 再跑 `sync_identity.py push`（或双击 `sync_cli.py` 选 push）
+3. 确认 WPS 云端已显示 HANDOFF.md 同步
+
+### 拉取侧（换电脑后）
+
+1. **先读磁盘**：HANDOFF.md → STATUS.md → 当日 / 昨日日志 → 用户级 MEMORY.md
+2. **再开口**：禁止使用「我记得上次说过…」等不来源于以上四步阅读的表述
+3. 再跑 `sync_identity.py pull`
+
+### 对话正文已丢失时的恢复
+
+1. 查 `workbuddy.db` 中该 session 的 `cwd` / 时间（列表元数据完好）
+2. 读 `<cwd>/.workbuddy/memory/STATUS.md` 与当日日志重建上下文
+3. **严禁编造对话内容**：磁盘没写的，就如实说“不知道”
+
+> 完整应急 SOP 见 `SKILL.md` 的 *Emergency Persistence: 5.4.7 IndexedDB Loss Era SOP* 章节。
+
 *此文件通过 WPS junction 物理共享（`C:\WorkBuddy` 是云盘 Junction），两台电脑的 AI 看到的是同一份物理文件。*

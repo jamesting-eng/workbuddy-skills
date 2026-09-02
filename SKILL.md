@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.0.0"
+version: "6.1.1"
 summary: 让 WorkBuddy 在多台 Windows 电脑之间无缝同步（WPS 云盘 + 交接单 + 自动守护进程）
 license: MIT
 tags:
@@ -42,6 +42,118 @@ database file will overwrite each other's conversation history. Instead, this sk
 
 This also addresses the core problem: each computer has a different `C:\Users\<name>` path,
 which breaks session references when switching devices.
+
+## Emergency Persistence: 5.4.7 IndexedDB Loss Era SOP
+
+> **When this applies**: User reports that conversation messages in
+> WorkBuddy disappear after restart (the session sidebar still shows new
+> sessions, but clicking into them shows no message body). This is the
+> **WorkBuddy 5.4.7 IndexedDB regression** — introduced in build
+> `5.4.7.37521366` (install-manifest generatedAt `2026-08-31T22:48:01`).
+> The Chromium IndexedDB subsystem fails to initialize under `app/session`,
+> so messages persist only in the renderer's memory and are lost on every
+> WB restart. Other storage paths (`Local Storage`, `Session Storage`,
+> `blob_storage`, `SharedStorage`) function normally — only IndexedDB is
+> broken. The TIDB / `@tencent/ovb-indexed-db` storage backend silently
+> falls back to in-memory storage. Diagnosis method and exclusion table:
+> see `Reporting the Bug to WorkBuddy Official` at the bottom of this
+chapter and the user's full bug-report markdown if attached.
+
+### Why This Skill Is Still Your Best Tool
+
+This skill is **disk-based by design** — `HANDOFF.md`, `MEMORY.md`,
+`STATUS.md`, daily logs, and `sync_identity.py` all write to disk
+out-of-band of IndexedDB. The 5.4.7 regression **does NOT break** the
+cross-device sync architecture — in fact, this era makes the skill
+**more critical** than usual:
+
+- New WB sessions start with empty conversation context (chat history
+  is gone)
+- The only surviving context is what is on disk
+- This skill's entire workflow IS that disk-based handoff
+
+So: **do not deactivate this skill during 5.4.7 — activate it harder.**
+
+### Mandatory Read Order at Session Start (5.4.7 era)
+
+In addition to the normal "switch computer" workflow in Step 6, every
+session (new conversation, restarted conversation, even same-machine
+continuation) should begin with these reads in this exact order:
+
+1. **`Read` `C:\WorkBuddy\_sync\HANDOFF.md`** — inter-machine handoff
+2. **`Read` `<current workspace>/.workbuddy/memory/STATUS.md`** — workspace state
+3. **`Read` `<current workspace>/.workbuddy/memory/YYYY-MM-DD.md`** (today + yesterday) — recent daily log
+4. **`Read` `~/.workbuddy/MEMORY.md`** (if exists) — user-level long-term
+5. **Then and only then** may you reply to the user
+
+**Forbidden in 5.4.7 era**: any phrasing like "I remember we discussed…",
+"as we agreed last time…", "based on what you told me…" that does NOT
+come from one of the four reads above. If you have not read them, you
+do not know — say so honestly.
+
+### Mandatory Write Discipline (5.4.7 era)
+
+Tighten the normal write rules (Step 6 already requires write-on-switch;
+the 5.4.7 era requires write more often):
+
+- **Every ~8 tool calls OR any decision affecting deliverables**:
+  update current workspace's `STATUS.md` with: project goal / latest
+  progress / current todos / recent conversation summary / key file paths.
+- **End of every substantive work session** (even without switching
+  computers): append today's `YYYY-MM-DD.md` with what was decided,
+  what was created, what is blocked.
+- **Any user-stated preference, hard constraint, or hard-coded value**
+  in conversation → write to `STATUS.md` immediately. Do not rely on
+  AI conversation memory.
+- **Any reason to believe the WB conversation will lose content** (long
+  session, complex multi-step task, before user mentions switching) →
+  preemptively summarize to disk **before** responding.
+
+### User-Facing Mitigations (5.4.7 era)
+
+Until official fix:
+
+- Close WB properly (right-click tray icon → Exit) so SQLite WAL
+  checkpoints. Even IndexedDB-lost sessions still have updated row
+  metadata in `workbuddy.db` (the list shows them, just the body is
+  gone).
+- Manually copy any critical conversation text into
+  `<workspace>/.workbuddy/memory/YYYY-MM-DD.md` or an external file
+  before closing WB.
+- Disable auto-update in WB Settings (About → 自动更新) — both to
+  prevent being bumped onto future buggy builds and to prepare for
+  the eventual 5.4.8 hotfix (you'll want to install it manually after
+  it's vetted).
+- Don't trust "the chat history remembers it" — always check disk.
+
+### Recovery Workflow if a Session's Body Is Lost
+
+When opening an apparently-empty session (list shows it, body is blank):
+
+1. **`Read`** `workbuddy.db` sessions row for that session id → recover
+   `cwd`, `created_at`, `last_activity_at` (intact even under 5.4.7).
+2. **`Read`** `<cwd>/.workbuddy/memory/STATUS.md` → recent context.
+3. **`Read`** `<cwd>/.workbuddy/memory/<that-day>.md` → that day's
+   working log.
+4. Reconstruct the conversation thread from those disk artifacts.
+5. If critical content is recovered → paste into the session's JSONL
+   via `scripts/restore_and_merge.py restore <session_id> <project_dir>`
+   (see Advanced: Session Recovery), then restart WB.
+
+**Never fabricate chat content.** If the disk artifacts don't tell you
+what was said, say so honestly. The whole point of disk-based
+persistence is that the truth lives on disk.
+
+### Reporting the Bug to WorkBuddy Official
+
+If the user wants to push back to WorkBuddy official:
+- Recipient: `workbuddy_ai@tencent.com` (Bug 反馈 channel)
+- Subject: `【Bug】WorkBuddy 5.4.7 升级后对话消息持久化失效（IndexedDB 子系统未初始化）`
+- Attach the bug-report markdown file (key sections are platform-independent)
+- Expect 7 business days; do NOT mark P0 framing in body unless
+  content loss is also blocking billing/legal/contract work
+
+---
 
 ## Prerequisites
 
@@ -741,6 +853,16 @@ pristine original). Use after a sync storm or whenever thousands of `-副本` fi
 
 Mechanical sync: scans `C:\WorkBuddy` workspaces, regenerates the HANDOFF.md machine section
 (leaving the AI-written section untouched), and assists with conversation export + sync passcode.
+
+### sync_cli.py (v6.1+)
+
+Single launcher that replaces the four `.bat` wrappers (`push.bat`, `pull.bat`,
+`start_sync.bat`, one-click sync). Double-click it for an interactive menu, or call
+`sync_cli.py pull` / `push` / `sync` / `verify` / `status` / `start` / `stop` /
+`startup-install`. `start` brings up the **watchdog** (which in turn supervises the
+daemon) rather than the daemon directly, so crashes stay self-healing. Distribution
+channels reject `.bat` files, so this is the only launcher that ships in the
+published package.
 
 ### scripts/fix_paths.py
 
