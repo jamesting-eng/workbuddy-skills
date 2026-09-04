@@ -1,53 +1,53 @@
-# GitHub 发布指南：workbuddy-skills / cross-device-sync
+# GitHub Publishing Guide: workbuddy-skills / cross-device-sync
 
-> 全程复制粘贴，不用动脑。本技能文件**直接位于 `workbuddy-skills` 仓库根目录**（平铺，无子目录），不是独立仓库。
-
----
-
-## 重要修正（v6）
-
-- 技能文件**平铺在 `workbuddy-skills` 仓库根目录**（不是独立仓库、不是 `cross-device-sync/` 子目录）。
-- v6 新增文件：`watchdog.bat`（看门狗 v2，与 watch_sync.py v2.2 配套）。
-- `sync_identity.py` 升到 v3.6（MEMORY.md 互覆污染根治），`watch_sync.py` 升到 v2.2（卡死自愈）。
-- ⚠️ `_sync/` 目录不在守护进程监听范围：升级脚本后，**必须手动**把新版
-  `watch_sync.py` + `watchdog.bat` 复制到另一台电脑的 `C:\WorkBuddy\_sync\` 同路径。
-- ⚠️ `watchdog.bat` 保持纯 ASCII（或 GBK）编码，UTF-8 中文会 CMD 乱码。
-
-## 安全提醒（PAT）
-
-- **不要把 GitHub PAT 贴进任何聊天或提交内容**。一旦泄露立即去 GitHub 撤销
-  （Settings → Developer settings → Personal access tokens）。
-- 推送时如需临时用 PAT：clone URL 里嵌 token → push 完成后立即
-  `git remote set-url origin https://github.com/<user>/workbuddy-skills.git` 剥离。
-- 公司机沙箱无外网时先 `export http_proxy=http://127.0.0.1:7890 && export https_proxy=http://127.0.0.1:7890`（Clash）。
+> Pure copy-paste, no thinking required. This skill's files **live directly in the `workbuddy-skills` repo root** (flat, no subdirectories), not as a standalone repo.
 
 ---
 
-## 第一步：拿到 workbuddy-skills 仓库
+## Important Corrections (v6)
 
-如果本地还没有克隆：
+- Skill files are **flat in the `workbuddy-skills` repo root** (not a standalone repo, not a `cross-device-sync/` subdirectory).
+- New in v6: `watchdog.bat` (watchdog v2, companion to watch_sync.py v2.2).
+- `sync_identity.py` bumped to v3.6 (root fix for MEMORY.md cross-overwrite pollution), `watch_sync.py` bumped to v2.2 (hang self-heal).
+- ⚠️ The `_sync/` directory is not covered by the daemon's watch scope: after upgrading the scripts, you **must manually** copy the new
+  `watch_sync.py` + `watchdog.bat` to the same path under `C:\WorkBuddy\_sync\` on the other computer.
+- ⚠️ Keep `watchdog.bat` pure ASCII (or GBK) encoded; UTF-8 Chinese text garbles in CMD.
+
+## Security Reminder (PAT)
+
+- **Never paste a GitHub PAT into any chat or commit**. If leaked, revoke it on GitHub immediately
+  (Settings → Developer settings → Personal access tokens).
+- If you need to use a PAT temporarily when pushing: embed the token in the clone URL → after the push completes, immediately
+  strip it with `git remote set-url origin https://github.com/<user>/workbuddy-skills.git`.
+- If the work machine's sandbox has no internet, first run `export http_proxy=http://127.0.0.1:7890 && export https_proxy=http://127.0.0.1:7890` (Clash).
+
+---
+
+## Step 1: Get the workbuddy-skills repo
+
+If not cloned locally yet:
 
 ```powershell
-cd C:\Users\$env:USERNAME\Documents\GitHub   # 或任意你喜欢的位置
-git clone https://github.com/<你的GitHub用户名>/workbuddy-skills.git
+cd C:\Users\$env:USERNAME\Documents\GitHub   # or any location you prefer
+git clone https://github.com/<your-GitHub-username>/workbuddy-skills.git
 cd workbuddy-skills
 ```
 
-如果已有克隆，先拉最新：
+If already cloned, pull the latest first:
 
 ```powershell
-cd <workbuddy-skills 本地路径>
+cd <local path to workbuddy-skills>
 git pull
 ```
 
 ---
 
-## 第二步：放入技能目录
+## Step 2: Place the skill files
 
-把本地 `_sync/` 里的最新技能文件复制/覆盖到仓库根目录：
+Copy/overwrite the latest skill files from the local `_sync/` into the repo root:
 
 ```
-workbuddy-skills/            ← 仓库根目录即技能根
+workbuddy-skills/            ← repo root = skill root
 ├── SKILL.md
 ├── README.md
 ├── PUBLISH.md
@@ -60,17 +60,17 @@ workbuddy-skills/            ← 仓库根目录即技能根
 ├── secret.txt.example
 ├── fix_db_isolation_v3.ps1
 ├── fix_workspace_state_sync.ps1
-├── push.bat / pull.bat / 一键同步.bat / start_sync.bat / watchdog.bat
+├── push.bat / pull.bat / one-click-sync.bat / start_sync.bat / watchdog.bat
 └── scripts/
     ├── fix_paths.py
     └── restore_and_merge.py
 ```
 
-> ⚠️ `secret.txt` 含真实暗号，**不要提交**（已在 .gitignore 思路中排除，或手动勿 add）。
+> ⚠️ `secret.txt` contains the real passphrase; **do not commit it** (excluded via the .gitignore approach, or just don't `git add` it manually).
 
 ---
 
-## 第三步：提交并推送
+## Step 3: Commit and push
 
 ```powershell
 git add -A
@@ -80,98 +80,99 @@ git push origin main
 
 ---
 
-## 第四步：仓库信息（GitHub 网页，API 改不了，只能手动点一次）✅ 已完成（2026-08-15），无需再操作
+## Step 4: Repo metadata (GitHub web UI; the API cannot change it, so it must be clicked once manually) ✅ Done (2026-08-15); no further action needed
 
-1. 打开 https://github.com/jamesting-eng/workbuddy-skills
-2. 右上角 About 区域 → 铅笔图标 ✏️
-3. Description 填：
+1. Open https://github.com/jamesting-eng/workbuddy-skills
+2. About section, top right → pencil icon ✏️
+3. Fill in the Description:
 
 ```
-让 WorkBuddy / CodeBuddy 在多台 Windows 电脑之间无缝同步 — WPS 云盘中转 + 交接单 + 自动守护进程
+Seamless sync of WorkBuddy / CodeBuddy across multiple Windows PCs — WPS cloud transit + handoff notes + automatic daemon
 ```
 
-4. 同一弹窗 Topics 逐个输入回车：
+4. In the same dialog, enter Topics one by one (press Enter after each):
 
 ```
 codebuddy  workbuddy  cross-device-sync  wps-cloud  sqlite  windows
 ```
 
-> 效果：别人搜 `codebuddy` / `workbuddy` / `sync` 能命中本仓库；搜索结果一眼看懂用途。
+> Effect: anyone searching `codebuddy` / `workbuddy` / `sync` will hit this repo; the search results make its purpose clear at a glance.
 
 ---
 
-## 验证
+## Verification
 
-推送后访问 `https://github.com/<用户名>/workbuddy-skills` ，确认仓库根目录
-下的文件都已更新（尤其是 README.md、SKILL.md、watch_sync.py、find_junk.py、clean_junk.py）。
+After pushing, visit `https://github.com/<username>/workbuddy-skills` and confirm the files in the repo root
+have all been updated (especially README.md, SKILL.md, watch_sync.py, find_junk.py, clean_junk.py).
 
 ---
 
-## 第五步：发布到 SkillHub（推荐 CLI 通道，已实测跑通）
+## Step 5: Publish to SkillHub (recommended CLI channel; tested and working)
 
-### 一次性准备
+### One-time preparation
 
-1. skillhub.cn 注册 + 实名认证，个人中心创建 API Token（`skh_...`）
-2. 拿 CLI（单文件 Python，无需安装）：
+1. Register on skillhub.cn + complete identity verification; create an API Token (`skh_...`) in your personal center
+2. Get the CLI (single-file Python, no installation needed):
    ```bash
    curl -fsSL https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com/install/latest.tar.gz | tar -xz
-   # 解出 cli/skills_store_cli.py，用本机 python 直接跑
+   # This extracts cli/skills_store_cli.py; run it directly with the local python
    ```
-3. SKILL.md frontmatter 补 SkillHub 必填字段：`slug` / `displayName` / `version` / `summary` / `tags` / `license`
+3. Add the SkillHub-required fields to the SKILL.md frontmatter: `slug` / `displayName` / `version` / `summary` / `tags` / `license`
 
-### 发布流程（Windows 记得 `export PYTHONIOENCODING=utf-8` 防 GBK 编码错）
+### Publishing flow (on Windows, remember `export PYTHONIOENCODING=utf-8` to avoid GBK encoding errors)
 
 ```bash
-python skills_store_cli.py login --key skh_你的Token --host https://api.skillhub.cn
-python skills_store_cli.py publish ./发布目录 --dry-run     # 预检
-python skills_store_cli.py publish ./发布目录 --changelog "..." --json
-# 成功返回 ok:true + skillId，reviewStatus=pending 等审核（1-7 个工作日）
+python skills_store_cli.py login --key skh_your-token --host https://api.skillhub.cn
+python skills_store_cli.py publish ./publish-dir --dry-run     # pre-check
+python skills_store_cli.py publish ./publish-dir --changelog "..." --json
+# On success: ok:true + skillId returned; reviewStatus=pending, awaiting review (1-7 business days)
 ```
 
-### ⚠️ 平台文件类型白名单（实测被拒过的）
+### ⚠️ Platform file-type whitelist (types that have actually been rejected)
 
-| 被拒文件 | 处理 |
+| Rejected file | Handling |
 |---|---|
-| `.gitignore` | 发布目录剔除（仓库工件，不进技能包） |
-| `LICENSE`（无扩展名） | 改名 `LICENSE.txt`（仅发布目录，GitHub 仓库保持无扩展名以被识别） |
-| `secret.txt.example` | 改名 `secret-example.txt`，同步改文档引用 |
-| **所有 `.bat`** | 剔除；看门狗用 **`watchdog.py`**（watchdog.bat 的 Python 移植版）替代，其余 bat 用 python 等价命令（README 里有说明段） |
+| `.gitignore` | Exclude from the publish directory (repo artifact; not part of the skill package) |
+| `LICENSE` (no extension) | Rename to `LICENSE.txt` (publish directory only; keep the extension-less `LICENSE` in the GitHub repo so it gets recognized) |
+| `secret.txt.example` | Rename to `secret-example.txt`, and update all references in docs accordingly |
+| **All `.bat` files** | Exclude; use **`watchdog.py`** (a Python port of watchdog.bat) for the watchdog, and python-equivalent commands for the other bat files (an explanation section exists in the README) |
 
-`.py` / `.md` / `.ps1` / `.yaml` / `.txt` 实测可过。`dist/cross-device-sync/` 是当前合规的发布目录样板。
+`.py` / `.md` / `.ps1` / `.yaml` / `.txt` have been tested and pass. `dist/cross-device-sync/` is the currently compliant sample publish directory.
 
-### 发布后
+### After publishing
 
-- 监控：开发者后台「我的技能」看审核状态（安全扫描 → 内容审核 → 上架）
-- 被拒会附理由，改完重新 publish 即可
-- 迭代版本：改 `manifest.yaml` 和 SKILL.md 的 version 后重新 publish
+- Monitor: check the review status under "My Skills" in the developer console (security scan → content review → listing)
+- Rejections come with a reason; fix it and publish again
+- Iterating versions: bump `version` in `manifest.yaml` and SKILL.md, then publish again
 
-## 以后更新（铁律：GitHub 与 SkillHub 双端同步发版）
+## Future Updates (iron rule: GitHub and SkillHub must be released in sync, both ends)
 
-> **版本必须一致**：任何一次版本更新，GitHub 和 SkillHub 都要发，且版本号相同。
-> 只发一边 = 未完成发版。GitHub About/Topics 已配置（2026-08-15），无需重复操作。
+> **Versions must match**: every version update must be released on both GitHub and SkillHub, with the same version number.
+> Releasing on only one end = the release is incomplete. GitHub About/Topics are already configured (2026-08-15); no need to repeat that step.
 
-### 双发清单（按顺序执行）
+### Dual Release Checklist (execute in order)
 
-1. **改版本号（两处必须同值）**：`manifest.yaml` 的 `version` + `SKILL.md` frontmatter 的 `version`
-2. **更新发布目录**：把变更文件同步到 `dist/cross-device-sync/`（注意白名单：无 `.bat`、`LICENSE.txt`、`secret-example.txt`）
-3. **GitHub 端**：
+1. **Bump the version number (must be identical in both places)**: `version` in `manifest.yaml` + `version` in the SKILL.md frontmatter
+2. **Update the publish directory**: sync changed files into `dist/cross-device-sync/` (mind the whitelist: no `.bat`, `LICENSE.txt`, `secret-example.txt`)
+3. **GitHub end**:
    ```powershell
    git add -A
-   git commit -m "feat(cross-device-sync): vX.Y — 一句话变更说明"
-   git push origin main   # 家里机需先挂 Clash 代理；PAT 用一次废一次
+   git commit -m "feat(cross-device-sync): vX.Y — one-line change summary"
+   git push origin main   # home machine needs the Clash proxy first; use a PAT once and discard it
    ```
-4. **SkillHub 端**（CLI 已 login 的前提下）：
+4. **SkillHub end** (assuming the CLI is already logged in):
    ```bash
    export PYTHONIOENCODING=utf-8
    python skills_store_cli.py publish ./dist/cross-device-sync --changelog "..." --json
    ```
-5. **核对**：GitHub 仓库页面版本 = SkillHub 后台「我的技能」版本 = `manifest.yaml` 版本，三者一致才算发完
-6. 若 SkillHub 审核被拒：按理由修改后重新 publish，**GitHub 端同步补 commit**（如修复文档/白名单问题），保持两端内容一致
+5. **Verify**: GitHub repo page version = SkillHub console "My Skills" version = `manifest.yaml` version; all three must match for the release to be complete
+6. If the SkillHub review is rejected: fix per the reason and publish again, **adding the matching commit on the GitHub end** (e.g., doc/whitelist fixes) to keep both ends consistent
 
-### 历史发版记录
+### Release History
 
-| 版本 | 日期 | GitHub commit | SkillHub |
+| Version | Date | GitHub commit | SkillHub |
 |---|---|---|---|
-| 6.0.0 | 2026-08-15 | `71a0569` | skillId=156632 / versionId=238390，审核 pending |
-| 6.1.1 | 2026-09-02 | `ceec8af` | skillId=156632，新增 5.4.7 IndexedDB 应急持久化 SOP + sync_cli.py 统一入口；同步将 SkillHub 线上包从 v5 文件集提升为与 GitHub v6 一致（补 watchdog.py / manifest.yaml / LICENSE.txt / sync_identity v3.6 / watch_sync v2.2） |
-| 6.3.0 | 2026-09-04 | `b9ad626` | 新增 5.5.x「路径重编码致历史失联」恢复 SOP + `scripts/recover_session_jsonl.py`（id 去重合并、幂等、原子替换）；SkillHub 中文版 changelog 全中文（skillId=156632 / versionId=286824） |
+| 6.0.0 | 2026-08-15 | `71a0569` | skillId=156632 / versionId=238390, review pending |
+| 6.1.1 | 2026-09-02 | `ceec8af` | skillId=156632; added 5.4.7 IndexedDB emergency persistence SOP + sync_cli.py unified entry point; also upgraded the SkillHub online package from the v5 file set to match GitHub v6 (added watchdog.py / manifest.yaml / LICENSE.txt / sync_identity v3.6 / watch_sync v2.2) |
+| 6.3.0 | 2026-09-04 | `b9ad626` | Added the 5.5.x "path re-encoding breaks historical linkage" recovery SOP + `scripts/recover_session_jsonl.py` (id dedup merge, idempotent, atomic replacement); SkillHub changelog fully in Chinese (skillId=156632 / versionId=286824) |
+| 6.3.1 | 2026-09-04 | (this commit) | Full English localization of all repo docs and Python comments (functional literals kept with notes); SkillHub side fully Sinicized |

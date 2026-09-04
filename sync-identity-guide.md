@@ -1,71 +1,71 @@
 ---
 name: sync-identity
 description: |
-  跨设备用户身份 & 记忆同步脚本。通过 C:\WorkBuddy\_sync\identity\ 中转，
-  实现 ~/.workbuddy/memory/ 等用户级文件在双电脑间同步。
-  触发词：「拉取同步」「push 同步」「跨设备记忆」。
+  Cross-device user identity & memory sync script. Via the C:\WorkBuddy\_sync\identity\ transit
+  directory, syncs user-level files such as ~/.workbuddy/memory/ between two computers.
+  Trigger phrases: "pull sync", "push sync", "cross-device memory".
 agent_created: true
 ---
 
-# sync_identity.py — 跨设备身份 & 记忆同步
+# sync_identity.py — Cross-Device Identity & Memory Sync
 
-## 文件位置
+## File Location
 
-`C:\WorkBuddy\_sync\sync_identity.py`（通过 WPS 云盘跨设备同步）
+`C:\WorkBuddy\_sync\sync_identity.py` (synced across devices via the WPS cloud drive)
 
-## 功能
+## Commands
 
-| 命令 | 作用 |
+| Command | Purpose |
 |------|------|
-| `python sync_identity.py` | 双向同步（较新者胜出）|
-| `python sync_identity.py push` | 强制本地 → 云盘（离开电脑前执行）|
-| `python sync_identity.py pull` | 强制云盘 → 本地 + 分发到各工作区（到新电脑后执行）|
+| `python sync_identity.py` | Bidirectional sync (newer wins) |
+| `python sync_identity.py push` | Force local → cloud drive (run before leaving the computer) |
+| `python sync_identity.py pull` | Force cloud drive → local + distribute to all workspaces (run after arriving at the other computer) |
 
-## 同步范围（v3.1）
+## Sync Scope (v3.1)
 
-- `~/.workbuddy/memory/` ↔ `_sync/identity/memory/`（每日交接单、对话记忆）
-- `~/.workbuddy/SOUL.md`、`IDENTITY.md`、`USER.md` ↔ `_sync/identity/`
+- `~/.workbuddy/memory/` ↔ `_sync/identity/memory/` (daily handoff notes, conversation memory)
+- `~/.workbuddy/SOUL.md`, `IDENTITY.md`, `USER.md` ↔ `_sync/identity/`
 - `~/.workbuddy/workspace-state.json` ↔ `_sync/identity/`
-- 各工作区 `.workbuddy/memory/` ↔ `_sync/identity/workspaces/<name>/memory/`
+- Each workspace's `.workbuddy/memory/` ↔ `_sync/identity/workspaces/<name>/memory/`
 
-## 使用流程
+## Usage Flow
 
-### 离开公司电脑前
+### Before leaving the office computer
 ```bash
 python C:\WorkBuddy\_sync\sync_identity.py push
 ```
-执行后关闭 WorkBuddy，等 5 秒让 WAL 落盘，再关电脑。
+After running it, close WorkBuddy, wait 5 seconds for the WAL to flush to disk, then shut down.
 
-### 到家打开家里电脑
+### After getting home and turning on the home computer
 ```bash
 python C:\WorkBuddy\_sync\sync_identity.py pull
 ```
-脚本会自动把云盘上的记忆分发到所有本地工作区。
+The script automatically distributes the memories on the cloud drive to all local workspaces.
 
-## pull 后的验证
+## Verification After pull
 
-对老千说：**「拉取同步，看交接单」**
-- 应能读到公司电脑上写的交接单（`~/.workbuddy/memory/YYYY-MM-DD.md`）
-- 各工作区的 `.workbuddy/memory/` 也有相同内容
+Tell the AI: **"pull sync, check the handoff note"**
+- It should be able to read the handoff note written on the office computer (`~/.workbuddy/memory/YYYY-MM-DD.md`)
+- Each workspace's `.workbuddy/memory/` should contain the same content
 
-## 和 workspace_sync.py 的关系
+## Relationship with workspace_sync.py
 
-| 脚本 | 同步层次 | 说明 |
+| Script | Sync Level | Description |
 |------|-----------|------|
-| `workspace_sync.py` | 工作区级 | 扫描 C:\WorkBuddy、更新 workspace-state.json、生成 HANDOFF.md |
-| `sync_identity.py` | 用户级 | 同步 ~/.workbuddy/memory 等身份文件，分发到各工作区 |
+| `workspace_sync.py` | Workspace level | Scans C:\WorkBuddy, updates workspace-state.json, generates HANDOFF.md |
+| `sync_identity.py` | User level | Syncs identity files such as ~/.workbuddy/memory and distributes them to each workspace |
 
-**两个都跑，跨设备体验才完整。**
+**Run both for a complete cross-device experience.**
 
-## 故障排查
+## Troubleshooting
 
-### pull 后交接单还是空的
-- 检查 WPS 云盘是否已完成同步（看网页端是否有最新文件）
-- 手动检查：`cat ~/.workbuddy/memory/2026-06-18.md`
+### Handoff note still empty after pull
+- Check whether the WPS cloud drive has finished syncing (check the web client for the latest files)
+- Verify manually: `cat ~/.workbuddy/memory/2026-06-18.md`
 
-### push 时报文件被占用
-- 先关闭 WorkBuddy，等 5 秒再试
+### "File in use" error during push
+- Close WorkBuddy first, wait 5 seconds, then retry
 
-### 家里电脑开了新工作区，读不到公司的工作区记忆
-- v3.1 已修复：pull 时会把用户级记忆分发到所有本地工作区
-- 若仍失败，手动复制：`cp ~/.workbuddy/memory/*.md <workspace>/.workbuddy/memory/`
+### New workspace opened on the home computer cannot read the office workspace's memory
+- Fixed in v3.1: pull distributes user-level memory to all local workspaces
+- If it still fails, copy manually: `cp ~/.workbuddy/memory/*.md <workspace>/.workbuddy/memory/`

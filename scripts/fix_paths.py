@@ -33,6 +33,8 @@ def find_sessions_dir():
             if os.path.isdir(wps_dir):
                 # Find the actual numbered subdirectory
                 for item in os.listdir(wps_dir):
+                    # NOTE: "WPS云盘" is the literal WPS cloud-drive folder name on
+                    # disk — functional path component, do NOT translate.
                     candidate = os.path.join(
                         user_profile, "Documents", "WPSDrive",
                         item, "WPS云盘", ".workbuddy", "sessions"

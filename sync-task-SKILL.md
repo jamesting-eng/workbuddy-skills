@@ -1,346 +1,346 @@
 ---
 name: sync-task
-description: 智能同步 WorkBuddy 会话。自动判断当前是哪台电脑，执行备份（公司电脑）或恢复（家里电脑）。
+description: Smart sync for WorkBuddy sessions. Automatically detects which computer you are on and performs backup (work PC) or restore (home PC).
 agent_created: true
 triggers:
-  - "同步任务"
-  - "同步一下"
-  - "备份任务"
-  - "恢复任务"
-  - "任务交接"
-  - "生成交接单"
-  - "接续任务"
-  - "继续上次"
-  - "拉取同步"
-  - "看交接单"
+  - "sync task"
+  - "sync now"
+  - "backup task"
+  - "restore task"
+  - "task handoff"
+  - "generate handoff note"
+  - "resume task"
+  - "continue last time"
+  - "pull sync"
+  - "show handoff note"
   - "sync"
-  - "继续"
-  - "上次做到哪了"
-  - "接着做"
-  - "回到之前"
-  - "收尾"
-  - "下班"
-  - "换电脑"
+  - "continue"
+  - "where did we leave off"
+  - "pick up where I left off"
+  - "back to before"
+  - "wrap up"
+  - "off work"
+  - "switch computer"
 ---
 
-# 同步任务技能
+# Sync Task Skill
 
-## 背景说明
+## Background
 
-WorkBuddy 的数据库（workbuddy.db）两台电脑各自独立，对话历史不跨设备同步。
-正确的跨设备接续方式是：用**中心交接单 HANDOFF.md** 记录当前进度，换电脑后读取继续工作。
+WorkBuddy's database (workbuddy.db) is independent on each of the two computers; conversation history does not sync across devices.
+The correct way to continue work across devices is: use the **central handoff note HANDOFF.md** to record current progress, then read it on the other computer to resume work.
 
-**中心交接单位置（唯一定点）**: `C:\WorkBuddy\_sync\HANDOFF.md`
+**Central handoff note location (single fixed point)**: `C:\WorkBuddy\_sync\HANDOFF.md`
 
-因为 `C:\WorkBuddy` 是 Windows Junction → WPS 云盘，所以这个文件是两台电脑**同一个物理文件**。
+Because `C:\WorkBuddy` is a Windows Junction → WPS cloud drive, this file is the **same physical file** on both computers.
 
 ---
 
-## ⚠️ 强制规则（CRITICAL — 两台电脑的 AI 都必须遵守）
+## ⚠️ Mandatory Rules (CRITICAL — the AI on both computers must follow these)
 
-### 规则 1：切换电脑后，第一个动作必须是读 HANDOFF.md
+### Rule 1: After switching computers, the first action must be reading HANDOFF.md
 
-当用户说"拉取同步"、"继续上次"、"看交接单"、"接续任务"、或任何暗示"我刚换了电脑"的话时：
+When the user says "pull sync", "continue last time", "show handoff note", "resume task", or anything implying "I just switched computers":
 
 ```
-第1步（工具调用）：Read C:\WorkBuddy\_sync\HANDOFF.md
-第2步：根据文件内容回复用户
+Step 1 (tool call): Read C:\WorkBuddy\_sync\HANDOFF.md
+Step 2: Reply to the user based on the file content
 ```
 
-**严禁**在第1步之前回复任何关于任务状态的内容。
-**严禁**在没读 HANDOFF.md 的情况下说"已经同步好了"、"两边都配置好了"。
+**Strictly forbidden** to reply with anything about task status before Step 1.
+**Strictly forbidden** to say "already synced" or "both sides are configured" without having read HANDOFF.md.
 
-### 规则 2：不知道就是不知道
+### Rule 2: If you don't know, say you don't know
 
-如果你没有在 HANDOFF.md 里看到的内容，就说"交接单里没提到这个，可能是上一台电脑没有记录"。
-**不要**用你自己的对话记忆去补充/猜测。
+If you did not see something in HANDOFF.md, say "the handoff note does not mention this; the previous computer may not have recorded it".
+**Do not** fill in or guess from your own conversation memory.
 
-### 规则 3：生成交接单要写全
+### Rule 3: Handoff notes must be complete
 
-生成 HANDOFF.md 时必须包含：
-- 当前时间、电脑名
-- 活跃项目及其状态
-- 关键决策
-- 明确的下一步
-- 用户要求包含的任何测试消息/暗号
+When generating HANDOFF.md, it must include:
+- Current time, computer name
+- Active projects and their status
+- Key decisions
+- Clear next steps
+- Any test message/passphrase the user asked to include
 
-### 规则 4：完成任何实质性工作后必须更新 HANDOFF.md（2026-06-25 新增）
+### Rule 4: HANDOFF.md must be updated after any substantive work (added 2026-06-25)
 
-**这是之前一直缺失的规则——导致跨设备同步反复失效。**
+**This rule was long missing — it caused repeated cross-device sync failures.**
 
-完成以下任何一种操作后，AI 必须立即更新 `C:\WorkBuddy\_sync\HANDOFF.md` 的 AI 手写区：
-- 生成了新文件（报告、代码、设计稿等）
-- 做出了关键决策（选型、方案变更、里程碑确认）
-- 完成了多步任务（8+ 工具调用）
-- 用户明确说"记下来"/"写到交接单"
-- Session 即将结束且有实质性产出
+After completing any of the following, the AI must immediately update the AI-written section of `C:\WorkBuddy\_sync\HANDOFF.md`:
+- Generated new files (reports, code, design drafts, etc.)
+- Made key decisions (technology choice, plan change, milestone confirmation)
+- Completed a multi-step task (8+ tool calls)
+- The user explicitly said "note this down" / "write it to the handoff note"
+- The session is about to end and there are substantive outputs
 
-**不要等用户说"生成交接单"才更新**——完成工作就应该主动推送到 HANDOFF.md。
-这是两台 AI 之间唯一的共享信息通道，不更新 = 另一台电脑的 AI 就是瞎子。
+**Do not wait for the user to say "generate handoff note" before updating** — finishing work means proactively pushing to HANDOFF.md.
+This is the only shared information channel between the two AIs; not updating it = the AI on the other computer is blind.
 
-### 规则 5：进入任何工作区时必须读工作区状态（2026-06-25 新增）
+### Rule 5: When entering any workspace, you must read the workspace status (added 2026-06-25)
 
-**这解决了"回到旧工作区不知道做到哪了"和"同一工作区新开对话从头开始"两个盲区。**
+**This closes two blind spots: "returning to an old workspace without knowing where things left off" and "starting a new conversation in the same workspace from scratch".**
 
-当以下任何一种情况发生时，AI **必须立即**读取工作区状态（无例外）：
-- 用户在新对话中说"继续"、"上次做到哪了"、"接着做"、"回到之前"
-- 用户切换到另一个工作区目录
-- **用户在同一工作区内新开了任何对话（无论用户是否说了具体任务）**
-- ⚠️ **系统注入的 working_memory 是过时的静态快照，不能替代读 STATUS.md**
+When any of the following happens, the AI **must immediately** read the workspace status (no exceptions):
+- The user says "continue", "where did we leave off", "pick up where I left off", or "back to before" in a new conversation
+- The user switches to another workspace directory
+- **The user starts any new conversation within the same workspace (regardless of whether a specific task was mentioned)**
+- ⚠️ **The working_memory injected by the system is an outdated static snapshot and cannot replace reading STATUS.md**
 
-**关键原则：同一工作区内的每个新对话，第一条工具调用必须是读状态文件。没有例外。**
+**Key principle: for every new conversation in the same workspace, the first tool call must be reading the status file. No exceptions.**
 
-**进入工作区必读顺序**（按优先级）：
+**Mandatory reading order when entering a workspace** (by priority):
 ```
-第1步：Read {当前工作区}/.workbuddy/memory/STATUS.md    ← 工作区状态快照
-第2步：Read {当前工作区}/.workbuddy/memory/MEMORY.md     ← 工作区长期记忆
-第3步：Read {当前工作区}/.workbuddy/memory/{最近3天}.md  ← 最近的 daily log
-第4步：Read C:\WorkBuddy\_sync\HANDOFF.md               ← 全局跨设备交接
+Step 1: Read {current workspace}/.workbuddy/memory/STATUS.md    ← workspace status snapshot
+Step 2: Read {current workspace}/.workbuddy/memory/MEMORY.md     ← workspace long-term memory
+Step 3: Read {current workspace}/.workbuddy/memory/{last 3 days}.md  ← recent daily logs
+Step 4: Read C:\WorkBuddy\_sync\HANDOFF.md               ← global cross-device handoff
 ```
 
-如果 STATUS.md 不存在，至少读 MEMORY.md + 最近 daily log + HANDOFF.md。
-如果读到的都是空/过时内容，告知用户"这个工作区没有找到最近的状态记录"。
+If STATUS.md does not exist, at minimum read MEMORY.md + the most recent daily log + HANDOFF.md.
+If everything read is empty or outdated, tell the user "no recent status records were found for this workspace".
 
-**严禁**在没读上述文件的情况下猜测"做到哪了"。
+**Strictly forbidden** to guess "where things left off" without reading the files above.
 
-### 规则 6：离开工作区时/完成工作后必须更新工作区 STATUS.md（2026-06-25 新增）
+### Rule 6: When leaving a workspace / after finishing work, the workspace STATUS.md must be updated (added 2026-06-25)
 
-**这是规则 4 的工作区级补充——规则 4 更新全局 HANDOFF.md，规则 6 更新当前工作区 STATUS.md。**
+**This is the workspace-level companion to Rule 4 — Rule 4 updates the global HANDOFF.md; Rule 6 updates the current workspace's STATUS.md.**
 
-完成以下任何一种操作后，AI 必须立即更新 `{当前工作区}/.workbuddy/memory/STATUS.md`：
-- 生成了新文件或修改了重要文件
-- 做出了关键决策
-- 完成了多步任务（8+ 工具调用）
-- 用户说"收尾"/"下班"/"换电脑"/"今天差不多了"
-- Session 即将结束且有实质性产出
+After completing any of the following, the AI must immediately update `{current workspace}/.workbuddy/memory/STATUS.md`:
+- Generated new files or modified important files
+- Made key decisions
+- Completed a multi-step task (8+ tool calls)
+- The user said "wrap up" / "off work" / "switch computer" / "that's about it for today"
+- The session is about to end and there are substantive outputs
 
-STATUS.md 格式（轻量，关键信息即可）：
+STATUS.md format (lightweight; key information only):
 ```markdown
-# 工作区状态 — {项目名}
+# Workspace Status — {project name}
 
-> 最后更新: {时间} | 电脑: {电脑名}
+> Last updated: {time} | Computer: {computer name}
 
-## 项目目标
-{一句话}
+## Project Goal
+{one sentence}
 
-## 最新进度
-- {要点1}
-- {要点2}
-- {要点3}
+## Latest Progress
+- {point 1}
+- {point 2}
+- {point 3}
 
-## 当前待办
-- [ ] {待办1}
+## Current TODOs
+- [ ] {todo 1}
 
-## 最近对话摘要
-| 日期 | 电脑 | 做了什么 |
-|------|------|----------|
+## Recent Conversation Summary
+| Date | Computer | What was done |
+|------|----------|---------------|
 
-## 关键文件
-- `{路径}` — {说明}
+## Key Files
+- `{path}` — {description}
 ```
 
-**如果 STATUS.md 不存在，创建它。**
-**如果文件路径跨电脑不同（venv 等），注明两台电脑的路径。**
+**If STATUS.md does not exist, create it.**
+**If file paths differ across computers (venv, etc.), note both computers' paths.**
 
 ---
 
-## 判断逻辑
+## Detection Logic
 
-1. **检查电脑名称**（通过 `hostname` 命令）：
-   - 公司电脑：`DESKTOP-JB3DUCH`（用户名 62588）
-   - 家里电脑：`LAPTOP-5RNP9DN3`（用户名 James Ting）
+1. **Check the computer name** (via the `hostname` command):
+   - Work PC: `DESKTOP-JB3DUCH` (username 62588)
+   - Home PC: `LAPTOP-5RNP9DN3` (username James Ting)
 
-2. **执行对应操作**：
-   - 要离开当前电脑 → 操作 A：生成交接单
-   - 到了新电脑 → 操作 B：读取交接单
+2. **Perform the corresponding action**:
+   - About to leave the current computer → Action A: generate handoff note
+   - Arrived at the new computer → Action B: read handoff note
 
 ---
 
-## 操作 A：生成任务交接单（离开电脑前）
+## Action A: Generate Task Handoff Note (before leaving the computer)
 
-当用户说"同步任务"、"备份任务"、"生成交接单"等，执行以下步骤：
+When the user says "sync task", "backup task", "generate handoff note", etc., perform the following steps:
 
-### Step 1：收集信息
+### Step 1: Gather information
 
-根据当前对话上下文整理：
-- 当前在做什么项目/任务？
-- 做到哪一步了？
-- 关键决策和文件路径
-- 下一步打算做什么？
-- 用户是否要求加入测试消息/暗号？
+Organize from the current conversation context:
+- What project/task is currently in progress?
+- What step has it reached?
+- Key decisions and file paths
+- What is planned next?
+- Did the user ask to include a test message/passphrase?
 
-### Step 2：写入中心交接单
+### Step 2: Write to the central handoff note
 
-**唯一路径**：`C:\WorkBuddy\_sync\HANDOFF.md`
+**Single path**: `C:\WorkBuddy\_sync\HANDOFF.md`
 
 ```markdown
-# 跨设备交接单
+# Cross-Device Handoff Note
 
-**生成时间**：{当前时间}
-**生成电脑**：{当前电脑名}
-
----
-
-## {用户要求的测试内容/暗号（如有）}
+**Generated at**: {current time}
+**Generated on**: {current computer name}
 
 ---
 
-## 活跃项目
-
-{列出项目及状态}
-
-## 当前任务
-
-{任务标题和简要描述}
-
-## 已完成
-
-{已做的事情}
-
-## 下一步
-
-{换了电脑要接着做的事情}
-
-## 重要信息
-
-{文件路径、关键变量、注意事项}
+## {user-requested test content/passphrase (if any)}
 
 ---
-*此文件通过 C:\WorkBuddy Junction → WPS 云盘跨设备共享*
+
+## Active Projects
+
+{list projects and their status}
+
+## Current Task
+
+{task title and brief description}
+
+## Completed
+
+{what has been done}
+
+## Next Steps
+
+{what to continue doing after switching computers}
+
+## Important Information
+
+{file paths, key variables, caveats}
+
+---
+*This file is shared across devices via C:\WorkBuddy Junction → WPS cloud drive*
 ```
 
-### Step 3：提示用户
+### Step 3: Prompt the user
 
 ```
-✅ 交接单已生成：C:\WorkBuddy\_sync\HANDOFF.md
+✅ Handoff note generated: C:\WorkBuddy\_sync\HANDOFF.md
 
-现在可以：
-1. 等待 WPS 云盘同步完成（看到绿色对勾）
-2. 关闭 WorkBuddy
-3. 换到另一台电脑，说"拉取同步"即可接续
+You can now:
+1. Wait for the WPS cloud drive to finish syncing (green checkmark visible)
+2. Close WorkBuddy
+3. Switch to the other computer and say "pull sync" to resume
 ```
 
 ---
 
-## 操作 B：读取交接单（到了新电脑后）
+## Action B: Read Handoff Note (after arriving at the new computer)
 
-### Step 1（必须是第一个工具调用）：读取中心交接单
+### Step 1 (must be the first tool call): Read the central handoff note
 
 ```
 Read C:\WorkBuddy\_sync\HANDOFF.md
 ```
 
-### Step 2：展示内容
+### Step 2: Present the content
 
-把交接单内容展示给用户，包括：
-- 生成时间和电脑
-- 活跃项目和状态
-- 当前任务和进度
-- 下一步要做的事
-- 任何测试暗号（如果有）
+Show the handoff note content to the user, including:
+- Generation time and computer
+- Active projects and their status
+- Current task and progress
+- Next steps
+- Any test passphrase (if present)
 
-### Step 3：询问是否继续
+### Step 3: Ask whether to continue
 
 ```
-我找到了{电脑名}在{时间}留下的交接单。
+I found the handoff note left by {computer name} at {time}.
 
-{摘要}
+{summary}
 
-要继续吗？
+Continue?
 ```
 
 ---
 
-## 注意事项
+## Notes
 
-1. **HANDOFF.md 只有一个**：`C:\WorkBuddy\_sync\HANDOFF.md`，不在各个工作区目录里
-2. **不需要同步 workbuddy.db**：两台电脑各有独立数据库是正常的
-3. **读不到文件怎么办**：提示用户检查 WPS 云盘是否已同步（等绿色对勾），或者在上一台电脑先生成交接单
-4. **对话历史不跨设备**：只有交接单里记录的信息可以传递
-5. **STATUS.md 是工作区级的接力棒**：每个工作区 `.workbuddy/memory/STATUS.md` 独立维护，不互相覆盖
-6. **同一工作区多对话**：每个对话的 AI 都读写同一个 STATUS.md，新对话进来读 STATUS.md 就能接上
-7. **⚠️ working_memory 不可靠（最高优先级警告）**
+1. **There is only one HANDOFF.md**: `C:\WorkBuddy\_sync\HANDOFF.md`; it is not inside any workspace directory
+2. **No need to sync workbuddy.db**: each computer having its own independent database is normal
+3. **If the file cannot be read**: prompt the user to check whether the WPS cloud drive has synced (wait for the green checkmark), or to generate the handoff note on the previous computer first
+4. **Conversation history does not cross devices**: only information recorded in the handoff note can be carried over
+5. **STATUS.md is the workspace-level relay baton**: each workspace's `.workbuddy/memory/STATUS.md` is maintained independently and does not overwrite each other
+6. **Multiple conversations in the same workspace**: the AI in every conversation reads and writes the same STATUS.md, so a new conversation can pick up right where things left off by reading STATUS.md
+7. **⚠️ working_memory is unreliable (highest-priority warning)**
 
-   每轮对话系统会自动注入 `working_memory`（项目背景、近期动态等）。
-   **这是静态快照，可能几天甚至几周前的状态。**
-   
-   - 错误：看到 working_memory 有项目信息就跳过读 STATUS.md
-   - 正确：**无条件先读磁盘文件**（STATUS.md > daily log > HANDOFF.md）
-   
-   用过时的 working_memory 判断进度 = 用旧地图导航 = 必翻车。
-   
-   **此规则优先级最高，覆盖所有其他规则。**
+   Each conversation round, the system automatically injects `working_memory` (project background, recent activity, etc.).
+   **This is a static snapshot and may reflect state from days or even weeks ago.**
+
+   - Wrong: skipping reading STATUS.md because working_memory contains project info
+   - Correct: **unconditionally read the on-disk files first** (STATUS.md > daily log > HANDOFF.md)
+
+   Judging progress from outdated working_memory = navigating with an old map = guaranteed failure.
+
+   **This rule has the highest priority and overrides all other rules.**
 
 ---
 
-## 操作 C：工作区切换 — 状态接续（进入旧工作区/新开对话）
+## Action C: Workspace Switching — Status Handoff (entering an old workspace / starting a new conversation)
 
-当用户在一个工作区内说"继续"/"上次做到哪了"/"接着做"，或者**用户在同一工作区内新开了任何对话**：
+When the user says "continue" / "where did we leave off" / "pick up where I left off" within a workspace, or **the user starts any new conversation within the same workspace**:
 
-### Step 1：读取工作区状态（**必须是第一条工具调用**，无例外）
+### Step 1: Read the workspace status (**must be the first tool call**, no exceptions)
 
-⚠️ 不要因为系统注入了 working_memory 就跳过这一步。working_memory 是过时的。
+⚠️ Do not skip this step just because the system injected working_memory. working_memory is outdated.
 
-按优先级依次读取：
+Read in priority order:
 
 ```
-1. Read {当前工作区}/.workbuddy/memory/STATUS.md
-2. Read {当前工作区}/.workbuddy/memory/MEMORY.md
-3. 列出 {当前工作区}/.workbuddy/memory/ 下的 daily log，读最近3天的
+1. Read {current workspace}/.workbuddy/memory/STATUS.md
+2. Read {current workspace}/.workbuddy/memory/MEMORY.md
+3. List the daily logs under {current workspace}/.workbuddy/memory/ and read the last 3 days
 4. Read C:\WorkBuddy\_sync\HANDOFF.md
 ```
 
-### Step 2：展示状态摘要
+### Step 2: Present a status summary
 
 ```
-📋 {工作区名} 状态摘要
+📋 {workspace name} status summary
 
-上次活跃：{时间} | {电脑}
-最新进度：
-  - {要点1}
-  - {要点2}
-当前待办：
-  - [ ] {待办1}
+Last active: {time} | {computer}
+Latest progress:
+  - {point 1}
+  - {point 2}
+Current TODOs:
+  - [ ] {todo 1}
 
-要继续推进吗？还是开新任务？
+Continue, or start a new task?
 ```
 
-### Step 3：根据用户回复行动
+### Step 3: Act based on the user's reply
 
-- "继续" → 从待办/最新进度接续
-- "开新任务" → 在 STATUS.md 添加新条目（不影响旧进度）
-- 用户说了具体要做什么 → 直接做
+- "Continue" → pick up from the TODOs / latest progress
+- "Start a new task" → add a new entry to STATUS.md (without affecting previous progress)
+- The user specified what to do → do it directly
 
 ---
 
-## 操作 D：离开工作区 — 更新状态（收尾/下班/换电脑）
+## Action D: Leaving a Workspace — Update Status (wrapping up / off work / switching computers)
 
-当用户说"收尾"/"下班"/"换电脑"/"今天差不多了"，或 session 即将结束时：
+When the user says "wrap up" / "off work" / "switch computer" / "that's about it for today", or the session is about to end:
 
-### Step 1：更新工作区 STATUS.md
+### Step 1: Update the workspace STATUS.md
 
 ```
-Read {当前工作区}/.workbuddy/memory/STATUS.md  （如果存在）
-Write/Edit STATUS.md → 更新：
-  - 最后更新时间
-  - 最新进度（补充本对话的产出）
-  - 当前待办（已完成 → 勾掉，新的 → 添加）
-  - 最近对话摘要表追加一行
+Read {current workspace}/.workbuddy/memory/STATUS.md  (if it exists)
+Write/Edit STATUS.md → update:
+  - Last updated time
+  - Latest progress (add this conversation's outputs)
+  - Current TODOs (completed → check off; new ones → add)
+  - Append a row to the recent conversation summary table
 ```
 
-### Step 2：更新全局 HANDOFF.md
+### Step 2: Update the global HANDOFF.md
 
 ```
 Read C:\WorkBuddy\_sync\HANDOFF.md
-Edit → 更新 AI 手写区（当前项目状态 + 近期对话摘要）
+Edit → update the AI-written section (current project status + recent conversation summary)
 ```
 
-### Step 3：提示用户
+### Step 3: Prompt the user
 
 ```
-✅ 状态已保存
-  - 工作区 STATUS.md：{路径}
-  - 全局 HANDOFF.md：C:\WorkBuddy\_sync\HANDOFF.md
+✅ Status saved
+  - Workspace STATUS.md: {path}
+  - Global HANDOFF.md: C:\WorkBuddy\_sync\HANDOFF.md
 
-下次在任何电脑打开这个工作区，说"继续"即可接上。
+Next time you open this workspace on any computer, just say "continue" to pick up.
 ```

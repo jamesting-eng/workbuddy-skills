@@ -2,8 +2,8 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.3.0"
-summary: 让 WorkBuddy 在多台 Windows 电脑之间无缝同步（WPS 云盘 + 交接单 + 自动守护进程）
+version: "6.3.1"
+summary: Seamless WorkBuddy sync across Windows PCs (WPS cloud drive + handoff notes + auto daemon)
 license: MIT
 tags:
   - workbuddy
@@ -13,15 +13,15 @@ tags:
   - windows
 description: |
   Configure WorkBuddy for seamless synchronization across multiple Windows computers
-  via WPS cloud drive (金山文档/WPS云盘). This skill should be used when the user wants
+  via WPS cloud drive (WPS). This skill should be used when the user wants
   to set up cross-device sync, migrate WorkBuddy data to cloud storage, fix "workspace
   deleted or renamed" errors when switching between computers with different Windows
   usernames, or unify session paths across devices. Triggers include phrases like
-  "cross-device sync", "跨设备同步", "sync WorkBuddy", "sync across computers",
+  "cross-device sync", "sync WorkBuddy", "sync across computers",
   "can't open old tasks on another computer", "workspace renamed or deleted error",
   "conversation history lost after update", "old chats disappeared after upgrading",
-  "5.5.2 对话丢失", "对话历史不见了", "恢复对话记录".
-  每台电脑需约 15 分钟一次性配置（Junction + 数据库隔离 + 路径修复），之后全自动同步。
+  "recover conversation history".
+  One-time setup per computer (~15 min: Junction + DB isolation + path fix), then fully automatic.
 agent_created: true
 homepage: https://github.com/jamesting-eng/workbuddy-skills
 ---
@@ -122,7 +122,7 @@ Until official fix:
 - Manually copy any critical conversation text into
   `<workspace>/.workbuddy/memory/YYYY-MM-DD.md` or an external file
   before closing WB.
-- Disable auto-update in WB Settings (About → 自动更新) — both to
+- Disable auto-update in WB Settings (About -> Auto Update) — both to
   prevent being bumped onto future buggy builds and to prepare for
   the eventual 5.4.8 hotfix (you'll want to install it manually after
   it's vetted).
@@ -149,8 +149,8 @@ persistence is that the truth lives on disk.
 ### Reporting the Bug to WorkBuddy Official
 
 If the user wants to push back to WorkBuddy official:
-- Recipient: `workbuddy_ai@tencent.com` (Bug 反馈 channel)
-- Subject: `【Bug】WorkBuddy 5.4.7 升级后对话消息持久化失效（IndexedDB 子系统未初始化）`
+- Recipient: `workbuddy_ai@tencent.com` (official bug-feedback channel; write the mail in Chinese)
+- Subject: "[Bug] Conversation message persistence broken after the WorkBuddy 5.4.7 upgrade (IndexedDB subsystem not initialized)"
 - Attach the bug-report markdown file (key sections are platform-independent)
 - Expect 7 business days; do NOT mark P0 framing in body unless
   content loss is also blocking billing/legal/contract work
@@ -181,7 +181,7 @@ elevated operations exist for exactly these reasons:
 
 Nothing here reads credentials, browses the network, or modifies anything outside
 the user's own WorkBuddy / WPS directories. All deletions (`clean_junk.py`) target
-WPS conflict-copy files (`-副本*`) only, and only when a pristine original exists.
+WPS conflict-copy files (`-副本*` — literal Chinese suffix, functional) only, and only when a pristine original exists.
 
 ## Workflow
 
@@ -215,7 +215,7 @@ On each computer, note the full paths:
    C:\WorkBuddy\<project>\fix_db_isolation_v3.ps1
    ```
 3. Right-click → "Run with PowerShell"
-4. Wait for "修复完成"
+4. Wait for the script's fix-completed message
 
 What the script does:
 - Detects if `.workbuddy` is a symlink → removes it, creates a real local directory
@@ -245,7 +245,7 @@ To sync the workspace sidebar list across devices, make it a symlink too:
 On **each computer**, run `fix_workspace_state_sync.ps1`:
 1. Find in the project workspace: `C:\WorkBuddy\<project>\fix_workspace_state_sync.ps1`
 2. Right-click → "Run with PowerShell" (no need to close WorkBuddy)
-3. Wait for "修复完成"
+3. Wait for the script's fix-completed message
 
 This creates:
 ```
@@ -349,6 +349,9 @@ use handoff notes to pass task context between devices.
 
 The file has two sections separated by HTML comments:
 
+> NOTE: the marker lines inside this template are intentionally Chinese — they must match
+> exactly what `workspace_sync.py` writes into the real HANDOFF.md. Do not translate them.
+
 ```
 # 跨设备交接单
 ...
@@ -369,13 +372,13 @@ The file has two sections separated by HTML comments:
 
 #### ⚠️ CRITICAL — For the AI (BOTH computers must follow this):
 
-**When the user switches computers and says anything about "同步", "拉取", "接续", "继续", "看交接单":**
+**When the user switches computers and says anything about syncing (spoken trigger phrases, in Chinese: "同步" sync / "拉取" pull / "接续" resume / "继续" continue / "看交接单" check the handoff):**
 
 1. **FIRST ACTION (before ANY reply about task status)**: Read `C:\WorkBuddy\_sync\HANDOFF.md`
 2. If the file exists and contains content → read it, tell the user what you found
-3. If the file is missing or empty → say "交接单为空，可能上一台电脑没有生成" and ask what to do
+3. If the file is missing or empty -> tell the user the handoff note is empty (the other computer may not have generated it yet) and ask what to do
 4. **NEVER** rely on your own conversation memory to guess what the other AI did
-5. **NEVER** say "已经同步好了" without first reading HANDOFF.md — you DON'T know until you read it
+5. **NEVER** claim "everything is already synced" without first reading HANDOFF.md — you DON'T know until you read it
 
 **Why this is mandatory**: Each computer's AI has its own conversation history (separate `workbuddy.db`).
 The ONLY way to know what happened on the other computer is through HANDOFF.md.
@@ -394,11 +397,11 @@ writing code, designing assets, etc.), the AI MUST update `C:\WorkBuddy\_sync\HA
 2. Update the AI section (`✅` → end of file) with:
    - What was accomplished in this session (project, files created, key decisions)
    - What the current status is (e.g., "GDD v0.3 complete, ready for review")
-   - What the next steps are (e.g., "待对方确认后推进众筹页面设计")
+   - What the next steps are
 3. Write the updated file
 
 **Triggers** (any of these = MUST update HANDOFF.md):
-- User says "生成交接单" / "写交接单" / "更新交接单" / "同步" / "记得写交接单"
+- User asks to generate/update the handoff note (spoken triggers, in Chinese: "生成交接单" / "写交接单" / "更新交接单" / "记得写交接单")
 - Session is ending and substantive work was done
 - User is about to switch computers (explicitly or implicitly)
 - Any multi-step task (8+ tool calls) has been completed
@@ -416,7 +419,7 @@ writing code, designing assets, etc.), the AI MUST update `C:\WorkBuddy\_sync\HA
 
 ---
 
-**Leaving a computer** — say "生成交接单" to create/update `C:\WorkBuddy\_sync\HANDOFF.md`,
+**Leaving a computer** — ask the AI to generate/update the handoff note at `C:\WorkBuddy\_sync\HANDOFF.md`,
 recording what was done, what's next, key decisions, and any test messages the user wants to verify.
 
 When generating HANDOFF.md, ALWAYS include:
@@ -456,10 +459,10 @@ precise control and cleanup. Two mechanisms on top:
 
 2. **Manual push/pull (fallback)** — run `sync_identity.py push` before leaving a computer, and
    `sync_identity.py pull` after arriving at the other. `.bat` wrappers: `push.bat`, `pull.bat`,
-   `一键同步.bat`.
+   the one-click-sync launcher (`一键同步.bat` — actual filename on disk, kept in Chinese).
 
 The transit directory is `C:\WorkBuddy\_sync\identity\`. `find_junk.py` / `clean_junk.py` clean
-up any `-副本` conflict files that slip through. `sync_identity.py` v3.6 **only transits
+up any `-副本` conflict files that slip through (literal Chinese suffix, functional). `sync_identity.py` v3.6 **only transits
 `YYYY-MM-DD.md` daily logs** — project identity files (MEMORY.md/STATUS.md/...) stay
 workspace-local to prevent cross-workspace overwrite pollution (7/24 & 7/30 incidents).
 
@@ -486,8 +489,8 @@ On each computer:
 1. Open WorkBuddy
 2. Check that the sidebar shows the same workspaces (via synced `workspace-state.json`)
 3. Click on a workspace — it should open normally (work files synced via Junction)
-4. Say "同步任务" to test handoff note generation
-5. Say "继续上次" on the other computer to verify task continuity
+4. Trigger the sync-task skill to test handoff note generation
+5. On the other computer, resume the last session to verify task continuity
 
 **Note**: Conversations from one computer will NOT appear on the other (by design).
 This is intentional — the `workbuddy.db` is per-computer to prevent overwrite conflicts.
@@ -631,7 +634,7 @@ If doing manually, verify after merge:
 ### Archived Sessions
 
 WorkBuddy currently has **NO UI filter for archived sessions**. The sidebar filter only shows:
-进行中 | 已完成 | 失败 | 待处理 | 规划中 | 全部状态
+In Progress | Completed | Failed | Pending | Planned | All
 
 Once a session is archived (status=archived in DB), it becomes invisible in the UI.
 To recover: manually change `status` back to `"working"` or `"completed"` in the database:
@@ -643,7 +646,7 @@ UPDATE sessions SET status = 'completed' WHERE id = '<session_id>';
 ### Timestamp "Year Bug"
 
 Restored messages with incorrect timestamps (wrong year) will:
-- Show as implausible dates in the UI (e.g. "56年前")
+- Show as implausible dates in the UI (e.g. "56 years ago")
 - May be filtered out entirely by WorkBuddy's rendering logic
 
 When restoring, always verify timestamps fall in the expected date range.
@@ -670,7 +673,7 @@ shutil.copy(file_path, workspace + 'filename.md')
 
 ### Automation Path Drift
 
-Automations (scheduled tasks like "下班自动存档") store a hardcoded `cwds` field
+Automations (scheduled tasks, e.g. an end-of-day auto-archive) store a hardcoded `cwds` field
 and may reference workspace paths in their `prompt` text. After path migration
 or when the active workspace changes (new conversation = new timestamp-based dir),
 automations silently point at the **old workspace** — they will run but write to
@@ -678,7 +681,7 @@ the wrong directory, or fail because the old workspace no longer exists.
 
 **Symptoms**:
 - Automation runs but output files appear in an old workspace
-- Automation shows dates from weeks ago ("5月30号")
+- Automation shows dates from weeks ago
 - `DAILY_STATUS.md` never updates in the current workspace
 
 **Root cause**: Automations are **bound to the session** in which they were created.
@@ -743,7 +746,7 @@ ls -la ~/.workbuddy   # should be drwxr-xr-x, NOT lrwxrwxrwx -> WPS
 python -c "import os; p=os.path.expanduser('~/.workbuddy/workbuddy.db'); print('OK' if os.path.exists(p) and not os.path.islink(p) else 'PROBLEM')"
 
 # 3. Subdirectories are symlinked to WPS cloud?
-ls -la ~/.workbuddy/skills   # should show -> ...WPS云盘/.workbuddy/skills
+ls -la ~/.workbuddy/skills   # should show -> .../WPSYun/WPS cloud dir/.workbuddy/skills (trailing dir is the literal WPS folder name)
 
 # 4. workspace-state.json is a symlink?
 python -c "import os; p=os.path.expanduser('~/.workbuddy/workspace-state.json'); print('SYNCED' if os.path.islink(p) else 'LOCAL ONLY')"
@@ -851,7 +854,7 @@ Triple-check these three things (all must be correct):
 2. **`cwd` path separators** — must use backslashes (`C:\WorkBuddy\...`), NOT forward slashes.
 3. **JSONL format** — verify `type`, `sessionId` (camelCase), `content` as array of `{type, text}`, `providerData` are all present.
 
-### Restored content shows implausible dates / "56年前"
+### Restored content shows implausible dates ("56 years ago")
 
 **Cause 1 (most common)**: `created_at` or `timestamp` was set to `0` (epoch 1970-01-01).
 
@@ -874,7 +877,7 @@ Always verify timestamps fall in the expected date range after restoration.
 If the WPS cloud drive path is different from the default, check WPS settings:
 WPS app > Settings > Cloud Document > Cache Location
 
-The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — only `<id>` varies.
+The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — only `<id>` varies (the trailing folder is the literal WPS cloud-drive folder name).
 
 ## Resources
 
@@ -882,8 +885,8 @@ The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — onl
 
 Bidirectional **transit-channel** sync. Collects each workspace's `.workbuddy/memory/` into
 `C:\WorkBuddy\_sync\identity\`, and distributes transit memory back to workspaces on pull.
-Also syncs HANDOFF.md / identity files. v3.4+ auto-cleans WPS `-副本` conflict files and skips
-any file containing "副本" to prevent sync storms; v3.5 sweeps junk before push.
+Also syncs HANDOFF.md / identity files. v3.4+ auto-cleans WPS conflict-copy files (literal suffix `-副本`, functional) and skips
+any file containing that suffix to prevent sync storms; v3.5 sweeps junk before push.
 **v3.6 (critical)**: only `YYYY-MM-DD.md` daily logs may enter the flat user-level namespace;
 project identity files (MEMORY.md / STATUS.md / DAILY_STATUS.md / HOME_WRAPUP.md /
 MORNING_BRIEF.md) are skipped — previously they collided across workspaces and "newest mtime
@@ -908,7 +911,7 @@ v2.2 — an old PID-only watchdog cannot detect a hung daemon.
 ### find_junk.py / clean_junk.py
 
 WPS conflict-copy scanner (generates an HTML report) and cleaner (only deletes copies that have a
-pristine original). Use after a sync storm or whenever thousands of `-副本` files appear.
+pristine original). Use after a sync storm or whenever thousands of conflict-copy (`-副本`) files appear.
 
 ### workspace_sync.py (v3.0)
 

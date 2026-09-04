@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-find_junk.py — WPS 云同步垃圾文件扫描器 v1.0
+find_junk.py — WPS cloud-sync junk file scanner v1.0
 ============================================
-用途：扫描 C:\\WorkBuddy 云同步树，找出 WPS 产生的冲突副本 / 临时文件，
-      生成一份可在 WPS 网页端对照删除的报告。
+Purpose: scan the C:\\WorkBuddy cloud-sync tree for WPS conflict copies / temp
+      files and generate a report for cross-checking deletion in the WPS web app.
 
-垃圾判定（文件名匹配，WPS 真实命名规律）：
-  1. 含 "副本"           → WPS 冲突副本，如 2026-06-03-副本20260706105036.md
-  2. 含 "~$"             → Office 临时锁文件，如 ~$report.docx
-  3. 含 ".tmp"           → 临时文件
-  4. 含 "conflict"       → 部分客户端冲突标记
-  5. 形如 " (1)" "(2)"    → 序号冲突副本
+Junk detection (file-name matching, real WPS naming patterns):
+  1. Contains the WPS "-copy" suffix (副本) → WPS conflict copy,
+     e.g. 2026-06-03-副本20260706105036.md
+  2. Contains "~$"       → Office temp lock file, e.g. ~$report.docx
+  3. Contains ".tmp"     → temp file
+  4. Contains "conflict" → conflict marker from some clients
+  5. Looks like " (1)" "(2)" → numbered conflict copies
 
-额外安全校验：对每个垃圾文件，尝试推导其"正本"文件名
-  （去掉 -副本<时间戳> 后缀）。若正本存在 → 标为「可确认删除」。
+Extra safety check: for each junk file, derive its "original" file name
+  (strip the -副本<timestamp> suffix). If the original exists → marked
+  "confirmed deletable".
 
-输出：
-  - 控制台摘要
-  - <scan_root>/junk_report.html   彩色报告（同步到云，处处可看）
-  - <scan_root>/junk_report.json   机器可读
+Output:
+  - Console summary
+  - <scan_root>/junk_report.html   color report (synced to the cloud, viewable anywhere)
+  - <scan_root>/junk_report.json   machine-readable
 
-用法：
-  python find_junk.py                 # 扫描 C:\\WorkBuddy
-  python find_junk.py "D:\\other"    # 扫描指定目录
+Usage:
+  python find_junk.py                 # scan C:\\WorkBuddy
+  python find_junk.py "D:\\other"    # scan a given directory
 """
 
 import os
@@ -36,19 +38,22 @@ from collections import defaultdict
 
 DEFAULT_ROOT = r"C:\WorkBuddy"
 
-# 跳过的噪声目录（绝不碰）
+# Noise directories to skip (never touched)
 SKIP_DIRS = {"node_modules", ".git", "__pycache__", ".idea", ".vscode"}
 
-# 垃圾文件名正则
+# Junk file-name regexes.
+# NOTE: the 副本 literal below is FUNCTIONAL — 副本 (Chinese for "copy") is the
+# suffix WPS appends to conflict-copy filenames. Do NOT translate.
 JUNK_RES = [
-    (re.compile(r"副本"), "WPS冲突副本"),
-    (re.compile(r"~\$", re.I), "Office临时锁文件"),
-    (re.compile(r"\.tmp$", re.I), "临时文件"),
-    (re.compile(r"conflict", re.I), "冲突标记"),
-    (re.compile(r"\s\(\d+\)$"), "序号冲突副本"),
+    (re.compile(r"副本"), "WPS conflict copy"),
+    (re.compile(r"~\$", re.I), "Office temp lock file"),
+    (re.compile(r"\.tmp$", re.I), "Temp file"),
+    (re.compile(r"conflict", re.I), "Conflict marker"),
+    (re.compile(r"\s\(\d+\)$"), "Numbered conflict copy"),
 ]
 
-# 从副本文件名推导正本名：去掉 "-副本<14位时间戳>"
+# Derive the original name from a copy's file name: strip "-副本<14-digit timestamp>".
+# NOTE: 副本 below is a functional filename pattern — do NOT translate.
 TS_RE = re.compile(r"-?副本\d{14}")
 GEN_RE = re.compile(r"副本\d{14}")
 
@@ -61,11 +66,11 @@ def classify(name: str):
 
 
 def strip_to_original(name: str) -> str:
-    """把 2026-06-03-副本20260706105036.md → 2026-06-03.md"""
+    """2026-06-03-副本20260706105036.md → 2026-06-03.md"""
     base, ext = os.path.splitext(name)
     base = GEN_RE.sub("", base)
     base = TS_RE.sub("", base)
-    # 去掉可能残留的尾随 '-'
+    # Strip any leftover trailing '-'
     base = base.rstrip("-")
     return base + ext
 
@@ -83,7 +88,7 @@ def scan(root: str):
     total_files = 0
 
     for dp, dn, fn in os.walk(root):
-        # 原地剪枝
+        # Prune in place
         dn[:] = [d for d in dn if d not in SKIP_DIRS]
         for f in fn:
             total_files += 1
@@ -100,7 +105,7 @@ def scan(root: str):
             has_original = os.path.exists(os.path.join(dp, original)) and original != f
             junk.append({
                 "name": f,
-                "folder": rel_folder if rel_folder != "." else "(根目录)",
+                "folder": rel_folder if rel_folder != "." else "(root)",
                 "size": size,
                 "kind": kind,
                 "original": original,
@@ -115,7 +120,7 @@ def build_report(root, junk, total_files):
     total_size = sum(j["size"] for j in junk)
     confirmed = sum(1 for j in junk if j["has_original"])
 
-    # 按文件夹分组
+    # Group by folder
     by_folder = defaultdict(list)
     for j in junk:
         by_folder[j["folder"]].append(j)
@@ -139,9 +144,9 @@ def build_report(root, junk, total_files):
 
     sample_html = ""
     if junk:
-        # 取前 50 个样例
+        # Take the first 50 samples
         for j in junk[:50]:
-            tag = '<span class="ok">✓ 有正本</span>' if j["has_original"] else '<span class="warn">⚠ 无正本</span>'
+            tag = '<span class="ok">✓ Original exists</span>' if j["has_original"] else '<span class="warn">⚠ No original</span>'
             sample_html += f"""
             <tr>
               <td class="path">{html.escape(j['folder'])}</td>
@@ -152,11 +157,11 @@ def build_report(root, junk, total_files):
             </tr>"""
 
     html_doc = f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WPS 云同步垃圾文件扫描报告</title>
+<title>WPS Cloud-Sync Junk File Scan Report</title>
 <style>
   * {{ box-sizing: border-box; }}
   body {{ font-family: -apple-system, "Microsoft YaHei", sans-serif; margin: 0;
@@ -192,44 +197,44 @@ def build_report(root, junk, total_files):
 </head>
 <body>
 <div class="wrap">
-  <h1>🧹 WPS 云同步垃圾文件扫描报告</h1>
-  <div class="sub">扫描根目录：<code>{html.escape(root)}</code> ｜ 生成时间：{gen_time} ｜ 扫描文件总数：{total_files}</div>
+  <h1>🧹 WPS Cloud-Sync Junk File Scan Report</h1>
+  <div class="sub">Scan root: <code>{html.escape(root)}</code> | Generated: {gen_time} | Files scanned: {total_files}</div>
 
   <div class="cards">
-    <div class="card"><div class="v">{total_junk}</div><div class="l">垃圾文件总数</div></div>
-    <div class="card"><div class="v">{human_size(total_size)}</div><div class="l">垃圾占用空间</div></div>
-    <div class="card"><div class="v">{len(by_folder)}</div><div class="l">涉及文件夹数</div></div>
-    <div class="card green"><div class="v">{confirmed}</div><div class="l">可确认删除(有正本)</div></div>
+    <div class="card"><div class="v">{total_junk}</div><div class="l">Total junk files</div></div>
+    <div class="card"><div class="v">{human_size(total_size)}</div><div class="l">Junk disk usage</div></div>
+    <div class="card"><div class="v">{len(by_folder)}</div><div class="l">Folders involved</div></div>
+    <div class="card green"><div class="v">{confirmed}</div><div class="l">Confirmed deletable (original exists)</div></div>
   </div>
 
   <section>
-    <h2>📁 按文件夹分布（照这个清单去云端删）</h2>
+    <h2>📁 Distribution by folder (delete in the cloud following this list)</h2>
     <table>
-      <tr><th>文件夹（相对扫描根）</th><th class="num">垃圾数</th><th class="num">大小</th><th class="num">有正本</th></tr>
+      <tr><th>Folder (relative to scan root)</th><th class="num">Junk</th><th class="num">Size</th><th class="num">With original</th></tr>
       {''.join(folder_rows)}
     </table>
   </section>
 
   <section>
-    <h2>🗑 云端删除步骤（只能在 WPS 网页端删，本地删会被云盘拉回）</h2>
+    <h2>🗑 Cloud deletion steps (delete only in the WPS web app; local deletions get pulled back by the cloud drive)</h2>
     <ol class="steps">
-      <li>打开 <b>WPS 网页版</b>（www.wps.cn → 登录同一账号）→ 进入「WPS 云盘」。</li>
-      <li>导航到上方清单里的第一个文件夹，例如 <code>WorkBuddy/_sync/identity/memory</code>。</li>
-      <li>在文件夹内搜索框输入 <b>副本</b>；若搜索是递归的，可直接全选删除；否则逐层进入子目录搜索。</li>
-      <li>按 <code>Ctrl+A</code> 全选 → 点「删除」。文件多时分批删（每批 500~1000 个），避免网页卡死。</li>
-      <li>删完后云端会自动把删除同步到本机，本地副本也会消失。重复上述步骤清理每个文件夹。</li>
-      <li>回到本机跑一次 <code>python find_junk.py</code> 复检，直到垃圾数为 0。</li>
+      <li>Open the <b>WPS web app</b> (www.wps.cn → sign in with the same account) → go to "WPS Cloud Drive".</li>
+      <li>Navigate to the first folder in the list above, e.g. <code>WorkBuddy/_sync/identity/memory</code>.</li>
+      <li>Type <b>副本</b> in the folder's search box (functional search term: 副本 is Chinese for "copy", the WPS conflict-copy suffix); if the search is recursive you can select all and delete at once, otherwise descend into each subfolder and search.</li>
+      <li>Press <code>Ctrl+A</code> to select all → click "Delete". With many files, delete in batches (500–1000 per batch) to avoid freezing the web page.</li>
+      <li>When done, the cloud automatically syncs the deletions to this machine and the local copies disappear too. Repeat these steps for every folder.</li>
+      <li>Back on this machine, run <code>python find_junk.py</code> to re-check, until the junk count is 0.</li>
     </ol>
-    <div class="note">💡 提示：这些 <code>-副本</code> 文件都是 WPS 在 7/6 双进程冲突时生成的，正本（无副本后缀）都已存在，<b>删除 100% 安全</b>。当前 v2.0 单 leader 机制已阻止新副本产生，这是一次性清理。</div>
+    <div class="note">💡 Note: these <code>-副本</code> files were all generated by WPS during the 7/6 dual-process conflict; the originals (without the -副本 suffix) all exist, so <b>deletion is 100% safe</b>. The v2.0 single-leader mechanism now prevents new copies from appearing — this is a one-time cleanup.</div>
   </section>
 
   <section>
-    <h2>🔍 垃圾文件样例（前 50 个）</h2>
+    <h2>🔍 Junk file samples (first 50)</h2>
     <table>
-      <tr><th>文件夹</th><th>文件名</th><th>类型</th><th class="num">大小</th><th>校验</th></tr>
+      <tr><th>Folder</th><th>File name</th><th>Kind</th><th class="num">Size</th><th>Check</th></tr>
       {sample_html}
     </table>
-    <p style="color:#8a9099;font-size:12px;">仅展示前 50 个；完整清单见同目录 <code>junk_report.json</code>。</p>
+    <p style="color:#8a9099;font-size:12px;">Only the first 50 are shown; see <code>junk_report.json</code> in the same directory for the full list.</p>
   </section>
 </div>
 </body>
@@ -241,13 +246,13 @@ def build_report(root, junk, total_files):
 def main():
     root = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ROOT
     if not os.path.isdir(root):
-        print(f"❌ 目录不存在: {root}")
+        print(f"❌ Directory does not exist: {root}")
         sys.exit(1)
 
-    print(f"🔍 扫描: {root}")
+    print(f"🔍 Scanning: {root}")
     junk, total = scan(root)
-    print(f"   扫描文件总数: {total}")
-    print(f"   垃圾文件数:   {len(junk)}")
+    print(f"   Files scanned: {total}")
+    print(f"   Junk files:    {len(junk)}")
 
     html_doc = build_report(root, junk, total)
     out_html = os.path.join(root, "junk_report.html")
@@ -268,9 +273,9 @@ def main():
 
     total_size = sum(j["size"] for j in junk)
     confirmed = sum(1 for j in junk if j["has_original"])
-    print(f"   垃圾总大小:   {human_size(total_size)}")
-    print(f"   可确认删除:   {confirmed}（有正本）")
-    print(f"   报告已生成:")
+    print(f"   Total junk size:   {human_size(total_size)}")
+    print(f"   Confirmed deletable: {confirmed} (original exists)")
+    print(f"   Reports generated:")
     print(f"     → {out_html}")
     print(f"     → {out_json}")
 

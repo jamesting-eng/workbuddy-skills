@@ -10,7 +10,7 @@ Critical format rules (learned the hard way):
   - user_id MUST match real user UUID, NOT "default"
   - JSONL messages need: type, sessionId(camelCase), cwd, content(array),
     providerData({} or {agent:"cli"}), timestamp(ms)
-  - Timestamps must be correct year — wrong year = "56年前" bug
+  - Timestamps must be correct year — wrong year = "56 years ago" display bug
 """
 import json
 import os
@@ -56,7 +56,7 @@ def get_user_id(db_path):
 
 
 def restore_session(session_id, project_cwd, topics, db_path, wb_dir):
-    """
+    r"""
     Rebuild a lost session's JSONL cache and DB record.
 
     Args:
@@ -100,8 +100,9 @@ def restore_session(session_id, project_cwd, topics, db_path, wb_dir):
         "sessionId": session_id,
         "cwd": cwd,
         "content": [{"type": "input_text", "text":
-            "[会话恢复标记] 此对话的完整消息记录在跨设备同步过程中丢失，"
-            "以下为基于云端摘要和项目产出重建的上下文。"}],
+            "[Session restore marker] The full message history of this conversation was "
+            "lost during cross-device sync. Below is the context rebuilt from the cloud "
+            "summary and project artifacts."}],
         "providerData": {},
         "timestamp": ts
     })
@@ -126,7 +127,7 @@ def restore_session(session_id, project_cwd, topics, db_path, wb_dir):
         "sessionId": session_id,
         "cwd": cwd,
         "content": [{"type": "output_text", "text":
-            "好的，以下是本会话的恢复摘要。"}],
+            "Sure — here is the restored summary of this session."}],
         "providerData": {"agent": "cli"},
         "parentId": marker_id,
         "timestamp": ts + 60000
@@ -143,7 +144,7 @@ def restore_session(session_id, project_cwd, topics, db_path, wb_dir):
                 "role": "user",
                 "sessionId": session_id,
                 "cwd": cwd,
-                "content": [{"type": "input_text", "text": f"(已恢复) {text}"}],
+                "content": [{"type": "input_text", "text": f"(restored) {text}"}],
                 "providerData": {},
                 "timestamp": ts
             })
@@ -154,7 +155,7 @@ def restore_session(session_id, project_cwd, topics, db_path, wb_dir):
                 "role": "assistant",
                 "sessionId": session_id,
                 "cwd": cwd,
-                "content": [{"type": "output_text", "text": f"(已恢复) {text}"}],
+                "content": [{"type": "output_text", "text": f"(restored) {text}"}],
                 "providerData": {"agent": "cli"},
                 "parentId": msg_id,
                 "timestamp": ts + 30000
@@ -383,8 +384,8 @@ def main():
 
         # Simple topics for testing
         topics = [
-            ("user", "示例用户消息"),
-            ("assistant", "示例助手回复"),
+            ("user", "Sample user message"),
+            ("assistant", "Sample assistant reply"),
         ]
 
         count = restore_session(session_id, project_dir, topics, db_path, wb_dir)

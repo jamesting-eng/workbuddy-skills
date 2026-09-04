@@ -1,45 +1,59 @@
 """
-WorkBuddy 跨设备同步守护进程 v2.2 (单 leader 选举 / 自愈 / 根治副本冲突 / 卡死自愈)
+WorkBuddy cross-device sync daemon v2.2 (single-leader election / self-healing / root fix for copy conflicts / stall self-healing)
 ========================================================================
-监听关键「源」文件，变了自动 push 到中转目录。
-零依赖：纯 Python 标准库（轮询 mtime）。
+Watches key "source" files and auto-pushes to the relay directory when they change.
+Zero dependencies: pure Python standard library (mtime polling).
 
-v2.0 关键改进（根治 6895 个 -副本 冲突风暴）：
-  - 【单 leader 选举】每台机器写自己的 heartbeat_<机器名>.txt（不同文件名，互不冲突）。
-    只有「当前唯一活跃」的机器才允许 push，避免两台电脑同时写同一 WPS 路径 → 不再产生副本。
-  - 【不再监听传输目录】只监听源：用户级 memory、各工作区 memory、以及交接文件
-    (HANDOFF.md / secret.txt / AI_HANDOFF_GUIDE.md)。绝不监听整个 _sync 传输目录，
-    根除「下载→再 push→再下载」回环。
-  - 【机器无关】PYTHON_EXE 改用 sys.executable，家里/公司都能直接跑，不再硬编码 62588 路径。
-  - 保留手动 push.bat 作为兜底（离开电脑前跑一次最稳）。
+v2.0 key improvements (root fix for the 6,895-file WPS "-copy" conflict storm):
+  - [Single-leader election] Each machine writes its own heartbeat_<machine>.txt
+    (different file names, no conflicts). Only the "currently sole active" machine
+    may push, preventing two computers from writing the same WPS path simultaneously
+    → no more conflict copies.
+  - [No longer watching the relay directory] Only sources are watched: user-level
+    memory, each workspace's memory, and the handoff files (HANDOFF.md / secret.txt /
+    AI_HANDOFF_GUIDE.md). The _sync relay directory is never watched as a whole,
+    eradicating the "download → re-push → re-download" loop.
+  - [Machine-independent] PYTHON_EXE now uses sys.executable, so it runs directly
+    at home and at the office; the hardcoded 62588 path is gone.
+  - Manual push.bat kept as a fallback (running it once before leaving is the most reliable).
 
-v2.1 关键改进（自愈，根治 7/7 静默死一周）：
-  - 【进程级不退出】watcher 主循环外套 try/except，任何未捕获异常只记日志 + sleep 10s
-    重建基线重进循环，进程永不退出（除非显式 stop / Ctrl-C）。
-  - 【run_sync 自愈】连续失败计数；超时/报错不再致命，下次循环继续尝试；
-    连续失败达到阈值（默认 3）自动重建基线 + 兜底 pull，避免卡在脏状态或单向僵死。
-  - 【心跳线程保护】heartbeat_loop 包 try/except，单跳异常不影响主循环。
-  - 【看门狗】watchdog.bat 通过 watch_sync.pid 检测进程存活，崩溃/被杀后 30s 内自动重启
-    （开机自启 watchdog.bat 即获得「机器重启 / 进程被杀」级别的终极自愈）。
-  - Windows 下 subprocess 用 CREATE_NO_WINDOW，避免后台弹黑窗。
+v2.1 key improvements (self-healing; root fix for the silent week-long death on 7/7):
+  - [Process never exits] The watcher main loop is wrapped in try/except; any uncaught
+    exception is only logged + sleep 10s, the baseline is rebuilt and the loop re-entered.
+    The process never exits (except explicit stop / Ctrl-C).
+  - [run_sync self-healing] Consecutive-failure counter; timeouts/errors are no longer
+    fatal — the next loop retries. When consecutive failures reach the threshold
+    (default 3), the baseline is rebuilt + a fallback pull runs, avoiding getting stuck
+    in a dirty state or a one-way deadlock.
+  - [Heartbeat thread protection] heartbeat_loop is wrapped in try/except; one failed
+    beat does not affect the main loop.
+  - [Watchdog] watchdog.bat uses watch_sync.pid to check process liveness and restarts
+    within 30s after a crash/kill (autostarting watchdog.bat at boot gives the ultimate
+    self-healing against "machine reboot / process killed").
+  - On Windows, subprocess uses CREATE_NO_WINDOW to avoid black console windows popping up.
 
-v2.2 关键改进（根治 7/13 起的「进程活着但 blocked」卡死）：
-  - 【根因：sitecustomize 劫持】sync_identity.py 在 WPS junction 路径上做 unlink/rmtree 时，
-    被 WorkBuddy 的 sitecustomize.py 劫持成「外部回收站子进程且永不返回」→ 主进程卡死、
-    还繁衍锁住 WPS 路径的孙进程，下次 sync 又卡同一把锁 → 永久超时/僵死。
-  - 【自愈根因修复 1】看门狗(watchdog.bat)以 -S 启动本进程、run_sync 的 push 与
-    _recover_after_failures 的 pull 子进程也都带 -S，跳过 sitecustomize 对
-    unlink/rmtree 的劫持——所有文件删除恢复正常语义，从根消除 WPS 路径上的回收站死锁。
-    （实测 self-re-exec 在 sitecustomize 改写 sys.executable 指向 WPS 路径的环境下会崩，
-      故不自举，改由 watchdog 统一以 -S 拉起。）
-  - 【主循环活性信号】每轮 scan 更新 liveness_<机器名>.txt（mtime）。
-    看门狗据此判定「主循环是否卡死」——PID 在但 liveness 过期 = 卡死 → 强杀重启。
-    （v2.1 的 watchdog 只看 PID 是否存活，检测不了 blocked，这是 7/13 后静默死一周的真因。）
+v2.2 key improvements (root fix for the "process alive but blocked" stall since 7/13):
+  - [Root cause: sitecustomize hijacking] When sync_identity.py does unlink/rmtree on WPS
+    junction paths, WorkBuddy's sitecustomize.py hijacks it into an "external recycle-bin
+    subprocess that never returns" → the main process stalls and spawns grandchild
+    processes holding locks on WPS paths; the next sync stalls on the same lock →
+    permanent timeout/deadlock.
+  - [Self-healing root fix 1] The watchdog (watchdog.bat) starts this process with -S,
+    and run_sync's push plus _recover_after_failures' pull subprocesses also use -S,
+    skipping sitecustomize's hijacking of unlink/rmtree — all file deletions regain
+    normal semantics, eliminating the recycle-bin deadlock on WPS paths at the root.
+    (In practice self-re-exec crashes in environments where sitecustomize rewrites
+      sys.executable to a WPS path, so no self-re-exec; the watchdog starts everything with -S.)
+  - [Main-loop liveness signal] Each scan round updates liveness_<machine>.txt (mtime).
+    The watchdog uses it to decide whether the main loop is stalled — PID alive but
+    liveness expired = stalled → force kill and restart.
+    (The v2.1 watchdog only checked PID liveness and could not detect "blocked" —
+      the real cause of the silent week-long death after 7/13.)
 
-启动方式：
-  python watch_sync.py            # 常驻守护（单 leader + 自愈 + 卡死自愈）
-  python watch_sync.py --once     # 跑一次 sync 后退出
-  python watch_sync.py --status   # 打印监听状态 + leader 状态
+Startup:
+  python watch_sync.py            # resident daemon (single leader + self-healing + stall self-healing)
+  python watch_sync.py --once     # run one sync then exit
+  python watch_sync.py --status   # print watch status + leader status
 """
 
 import os
@@ -50,17 +64,17 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
-# ─── 配置 ────────────────────────────────────────────────────────────────
+# ─── Configuration ────────────────────────────────────────────────────────────
 SYNC_SCRIPT = Path(r"C:\WorkBuddy\_sync\sync_identity.py")
-# 机器无关：用当前解释器自身，家里/公司都能跑
+# Machine-independent: use the current interpreter itself; runs at home and at the office
 PYTHON_EXE = Path(sys.executable)
 
-# 只监听「源」根，绝不监听 _sync 传输目录整体
+# Only watch "source" roots; never watch the _sync relay directory as a whole
 WATCH_ROOTS = [
     Path(r"C:\WorkBuddy"),
     Path.home() / ".workbuddy",
 ]
-# 交接文件显式监听（它们在 _sync 下，但属于要同步的内容，不是传输回环）
+# Handoff files watched explicitly (they live under _sync but are content to sync, not relay loops)
 HANDOFF_FILES = [
     Path(r"C:\WorkBuddy\_sync\HANDOFF.md"),
     Path(r"C:\WorkBuddy\_sync\secret.txt"),
@@ -70,39 +84,39 @@ HANDOFF_FILES = [
 SKIP_DIRS = {"node_modules", "__pycache__", ".git", ".venv", "envs", "venv",
              ".next", "dist", "build", ".claude", ".playwright-mcp",
              "$RECYCLE.BIN", "System Volume Information",
-             "identity", "_sync"}   # ← v2.0 新增 _sync：不再扫传输目录
+             "identity", "_sync"}   # ← v2.0 adds _sync: the relay directory is no longer scanned
 INTERESTED_EXTS = {".md", ".json", ".py", ".txt"}
-SCAN_INTERVAL = 1.0       # 秒
-DEBOUNCE_SEC = 1.0        # 秒
-HEARTBEAT_SEC = 5         # 心跳写入间隔
-STANDDOWN_SEC = 45        # 若另一台机器心跳在 45s 内，本机让出 leader，不 push
+SCAN_INTERVAL = 1.0       # seconds
+DEBOUNCE_SEC = 1.0        # seconds
+HEARTBEAT_SEC = 5         # heartbeat write interval
+STANDDOWN_SEC = 45        # if another machine's heartbeat is within 45s, this machine yields leadership and does not push
 LOG_FILE = Path(r"C:\WorkBuddy\_sync\watch_sync.log")
 PID_FILE = Path(r"C:\WorkBuddy\_sync\watch_sync.pid")
 
-# 自愈参数
-RESTART_DELAY = 10        # 主循环异常后等待重启秒数
-SYNC_TIMEOUT = 180        # 单次 sync 子进程超时（秒）
-MAX_CONSECUTIVE_FAILS = 3  # 连续失败达到此值触发兜底恢复（rebuild baseline + pull）
-# v2.2：主循环活性信号过期阈值（秒）。看门狗据此判定主循环卡死。
-# 必须 > SYNC_TIMEOUT + 余量，避免正常长耗时 sync 期间误杀。
+# Self-healing parameters
+RESTART_DELAY = 10        # seconds to wait before restarting after a main-loop exception
+SYNC_TIMEOUT = 180        # per-sync subprocess timeout (seconds)
+MAX_CONSECUTIVE_FAILS = 3  # consecutive-failure threshold that triggers fallback recovery (rebuild baseline + pull)
+# v2.2: main-loop liveness signal expiry threshold (seconds). The watchdog uses it to detect a stalled main loop.
+# Must be > SYNC_TIMEOUT + margin to avoid false kills during legitimately long syncs.
 LIVENESS_MAX_AGE = 240
 
-# 机器标识：用计算机名（公司 DESKTOP-7QBVB48 / 家里 James Ting），每机独立心跳文件
+# Machine identity: the computer name (office DESKTOP-7QBVB48 / home James Ting); each machine gets its own heartbeat file
 MACHINE_ID = (os.environ.get("COMPUTERNAME")
               or os.environ.get("HOSTNAME")
               or "unknown").strip()
 HEARTBEAT_FILE = Path(r"C:\WorkBuddy\_sync") / f"heartbeat_{MACHINE_ID}.txt"
-# v2.2：主循环活性信号（与主循环驱动绑定，卡死即停写 → 看门狗可检测）
+# v2.2: main-loop liveness signal (tied to the main loop; stops being written when stalled → watchdog can detect)
 LIVENESS_FILE = HEARTBEAT_FILE.with_name(f"liveness_{MACHINE_ID}.txt")
 
-# ─── 全局状态 ────────────────────────────────────────────────────────────
+# ─── Global state ─────────────────────────────────────────────────────────────
 stop_event = threading.Event()
 sync_lock = threading.Lock()
 last_change_time = 0
 sync_running = False
 pending_refresh = False
-baseline_index = {}            # v2.1：基线文件索引（全局，便于自愈重置）
-consecutive_failures = 0       # v2.1：连续 sync 失败计数
+baseline_index = {}            # v2.1: baseline file index (global, easy to reset for self-healing)
+consecutive_failures = 0       # v2.1: consecutive sync failure counter
 
 
 def log(msg: str):
@@ -116,16 +130,16 @@ def log(msg: str):
 
 
 def _win_no_window() -> int:
-    """Windows 下返回 CREATE_NO_WINDOW 标志，避免后台弹黑窗；其他平台返回 0。"""
+    """On Windows return the CREATE_NO_WINDOW flag so no black console window pops up in the background; return 0 on other platforms."""
     if sys.platform == "win32":
         return getattr(subprocess, "CREATE_NO_WINDOW", 0)
     return 0
 
 
-# ─── 单 leader 选举 ──────────────────────────────────────────────────────
+# ─── Single-leader election ───────────────────────────────────────────────────
 
 def write_heartbeat():
-    """写自己的心跳文件（每 HEARTBEAT_SEC 一次）。文件名含机器名，互不冲突。"""
+    """Write this machine's heartbeat file (every HEARTBEAT_SEC). File name includes the machine name, so no conflicts."""
     try:
         HEARTBEAT_FILE.write_text(datetime.now().isoformat(), encoding="utf-8")
     except Exception:
@@ -133,7 +147,7 @@ def write_heartbeat():
 
 
 def touch_liveness():
-    """v2.2：主循环每轮更新活性信号（mtime）。卡死即停写 → 看门狗可检测。"""
+    """v2.2: refresh the liveness signal each main-loop round (mtime). Stops being written when stalled → watchdog can detect."""
     try:
         LIVENESS_FILE.write_text(datetime.now().isoformat(), encoding="utf-8")
     except Exception:
@@ -141,7 +155,7 @@ def touch_liveness():
 
 
 def am_leader() -> bool:
-    """是否当前唯一活跃机器。若发现其他机器的心跳在 STANDDOWN_SEC 内 → 让出。"""
+    """Whether this is the currently sole active machine. If another machine's heartbeat is within STANDDOWN_SEC → yield."""
     now = time.time()
     sync_dir = Path(r"C:\WorkBuddy\_sync")
     if not sync_dir.exists():
@@ -159,19 +173,21 @@ def am_leader() -> bool:
 
 
 def heartbeat_loop():
-    # v2.1：包 try/except，单跳异常不影响主循环
+    # v2.1: wrapped in try/except so one failed beat does not affect the main loop
     while not stop_event.is_set():
         try:
             write_heartbeat()
         except Exception as e:
-            log(f"⚠️  heartbeat 写入异常（忽略）: {e!r}")
+            log(f"⚠️  heartbeat write error (ignored): {e!r}")
         time.sleep(HEARTBEAT_SEC)
 
 
-# ─── 文件索引 ────────────────────────────────────────────────────────────
+# ─── File index ───────────────────────────────────────────────────────────────
 
 def _is_interested(path: Path) -> bool:
     name = path.name
+    # NOTE: "公司电脑操作清单.md" is a real synced file name ("company computer
+    # operations checklist") — functional literal, do NOT translate.
     if name in {"HANDOFF.md", "AI_HANDOFF_GUIDE.md", "secret.txt",
                 "公司电脑操作清单.md"}:
         return True
@@ -211,13 +227,13 @@ def build_file_index() -> dict:
                     except (OSError, PermissionError):
                         pass
         except (OSError, PermissionError):
-            # v2.1：walk 中途 IO 抖动只跳过该根，不冒泡
+            # v2.1: transient IO errors during walk only skip that root, no bubbling up
             pass
     return index
 
 
 def run_sync(force: bool = False):
-    """执行一次 sync_identity.py push（仅本机为 leader 时调用）。带自愈。"""
+    """Run one sync_identity.py push (only called when this machine is leader). With self-healing."""
     global sync_running, consecutive_failures
     if sync_running and not force:
         return
@@ -226,8 +242,9 @@ def run_sync(force: bool = False):
             return
         sync_running = True
     try:
-        # v2.2：带 -S 跳过 sitecustomize，避免 WPS 路径上 unlink/rmtree 被劫持成
-        # 永不返回的回收站子进程（这是 7/13 起进程 blocked 的卡死根因）。
+        # v2.2: use -S to skip sitecustomize, avoiding unlink/rmtree on WPS paths being
+        # hijacked into a never-returning recycle-bin subprocess (the root cause of the
+        # process being blocked since 7/13).
         result = subprocess.run(
             [str(PYTHON_EXE), "-S", str(SYNC_SCRIPT), "push"],
             capture_output=True, text=True, timeout=SYNC_TIMEOUT,
@@ -245,22 +262,26 @@ def run_sync(force: bool = False):
                     pulled += int(line.split("pulled:")[-1].strip().rstrip(".").split()[0])
                 except Exception:
                     pass
+            # NOTE: the Chinese markers below are INTENTIONAL — they parse the Chinese
+            # per-workspace status lines printed by sync_identity.py's
+            # sync_workspace_memories() (工作区 = "workspace", 推送 = "pushed").
+            # Output-format contract between the two scripts; do NOT translate.
             if "推送" in line and "工作区" in line:
                 try:
                     pushed += int(line.split("推送")[-1].strip().split()[0])
                 except Exception:
                     pass
         log(f"🔄 auto-sync pushed={pushed} pulled={pulled} | leader={MACHINE_ID}")
-        consecutive_failures = 0   # v2.1：成功清零
+        consecutive_failures = 0   # v2.1: reset on success
         return "refresh_index"
     except subprocess.TimeoutExpired:
         consecutive_failures += 1
-        log(f"⚠️  sync timeout ({SYNC_TIMEOUT}s) [连续失败 {consecutive_failures}]")
+        log(f"⚠️  sync timeout ({SYNC_TIMEOUT}s) [consecutive failures: {consecutive_failures}]")
         if consecutive_failures >= MAX_CONSECUTIVE_FAILS:
             _recover_after_failures()
     except Exception as e:
         consecutive_failures += 1
-        log(f"❌ sync error: {e} [连续失败 {consecutive_failures}]")
+        log(f"❌ sync error: {e} [consecutive failures: {consecutive_failures}]")
         if consecutive_failures >= MAX_CONSECUTIVE_FAILS:
             _recover_after_failures()
     finally:
@@ -269,25 +290,25 @@ def run_sync(force: bool = False):
 
 
 def _recover_after_failures():
-    """v2.1：连续失败达到阈值后的自愈恢复。重建基线 + 兜底 pull，避免脏状态/单向僵死。"""
+    """v2.1: self-healing recovery after consecutive failures reach the threshold. Rebuilds the baseline + runs a fallback pull, avoiding a dirty state / one-way deadlock."""
     global consecutive_failures, baseline_index
-    log("🔧 连续失败达到阈值，触发自愈恢复（重建基线 + 兜底 pull）")
+    log("🔧 Consecutive failures reached the threshold; triggering self-healing recovery (rebuild baseline + fallback pull)")
     try:
         baseline_index = build_file_index()
-        log(f"🔧 基线已重建：{len(baseline_index)} 个文件")
+        log(f"🔧 Baseline rebuilt: {len(baseline_index)} files")
     except Exception as e:
-        log(f"🔧 基线重建失败（忽略）: {e!r}")
-    # 兜底 pull：保证不只在 push，单向卡死时能拉回
+        log(f"🔧 Baseline rebuild failed (ignored): {e!r}")
+    # Fallback pull: make sure we don't only push; can pull back when one-way stuck
     try:
-        # v2.2：pull 同样带 -S，避免 sitecustomize 劫持
+        # v2.2: the pull also uses -S to avoid sitecustomize hijacking
         subprocess.run(
             [str(PYTHON_EXE), "-S", str(SYNC_SCRIPT), "pull"],
             capture_output=True, text=True, timeout=SYNC_TIMEOUT,
             creationflags=_win_no_window(),
         )
-        log("🔧 兜底 pull 完成")
+        log("🔧 Fallback pull finished")
     except Exception as e:
-        log(f"🔧 兜底 pull 也失败（忽略）: {e!r}")
+        log(f"🔧 Fallback pull also failed (ignored): {e!r}")
     consecutive_failures = 0
 
 
@@ -301,14 +322,14 @@ def _debounced_sync():
 
 
 def _watcher_inner():
-    """v2.1：真正的监听循环体（可被外层自愈包裹）。"""
+    """v2.1: the actual watch-loop body (wrapped by the outer self-healing layer)."""
     global baseline_index, pending_refresh
     baseline_index = build_file_index()
-    log(f"初始扫描: {len(baseline_index)} 个文件")
+    log(f"Initial scan: {len(baseline_index)} files")
 
     pending_thread = None
     while not stop_event.is_set():
-        touch_liveness()   # v2.2：每轮通告主循环活性（卡死即停写 → 看门狗可检测）
+        touch_liveness()   # v2.2: announce main-loop liveness each round (stops when stalled → watchdog can detect)
         time.sleep(SCAN_INTERVAL)
         if pending_refresh:
             baseline_index = build_file_index()
@@ -332,14 +353,14 @@ def _watcher_inner():
                 rel = p.relative_to(r"C:\WorkBuddy")
             except Exception:
                 rel = p
-            log(f"📝 变化: {rel}")
+            log(f"📝 Changed: {rel}")
         if len(changed) > 5:
-            log(f"   ...还有 {len(changed) - 5} 个文件")
+            log(f"   ...and {len(changed) - 5} more files")
 
-        # 单 leader：若另一台机器活跃，本机让出，不 push（避免并发写 → 副本）
+        # Single leader: if the other machine is active, this machine yields and does not push (avoids concurrent writes → conflict copies)
         if not am_leader():
-            log("🕊  另一台机器活跃，本机让出 leader，跳过 push")
-            # 重建基线，避免反复检测同一变化
+            log("🕊  Another machine is active; this machine yields leadership and skips push")
+            # Rebuild the baseline to avoid re-detecting the same change repeatedly
             baseline_index = build_file_index()
             continue
 
@@ -350,26 +371,26 @@ def _watcher_inner():
 
 
 def watcher_loop():
-    """v2.1：自愈外层。任何未捕获异常只记日志 + 等待 + 重进，进程永不退出。"""
-    log(f"启动守护进程 PID={os.getpid()} machine={MACHINE_ID}")
-    log(f"监听根: {[str(r) for r in WATCH_ROOTS]} + {len(HANDOFF_FILES)} 个交接文件")
-    log(f"扫描间隔: {SCAN_INTERVAL}s | 防抖: {DEBOUNCE_SEC}s | leader 让出窗口: {STANDDOWN_SEC}s")
-    log(f"自愈: 异常重启 {RESTART_DELAY}s | 连续失败阈值 {MAX_CONSECUTIVE_FAILS} | 超时 {SYNC_TIMEOUT}s")
-    log(f"卡死自愈: liveness 阈值 {LIVENESS_MAX_AGE}s（看门狗据此强杀 blocked 进程）")
+    """v2.1: self-healing outer layer. Any uncaught exception is only logged + wait + re-enter; the process never exits."""
+    log(f"Daemon started PID={os.getpid()} machine={MACHINE_ID}")
+    log(f"Watch roots: {[str(r) for r in WATCH_ROOTS]} + {len(HANDOFF_FILES)} handoff files")
+    log(f"Scan interval: {SCAN_INTERVAL}s | debounce: {DEBOUNCE_SEC}s | leader yield window: {STANDDOWN_SEC}s")
+    log(f"Self-healing: restart after {RESTART_DELAY}s | consecutive-failure threshold {MAX_CONSECUTIVE_FAILS} | timeout {SYNC_TIMEOUT}s")
+    log(f"Stall self-healing: liveness threshold {LIVENESS_MAX_AGE}s (the watchdog force-kills blocked processes based on it)")
 
     while not stop_event.is_set():
         try:
             _watcher_inner()
         except Exception as e:
-            log(f"❌ 守护循环异常（自愈中，{RESTART_DELAY}s 后重启）: {e!r}")
-            # 清掉可能脏掉的基线，下次重进会重建
+            log(f"❌ Watch loop exception (self-healing, restarting in {RESTART_DELAY}s): {e!r}")
+            # Clear a possibly-dirty baseline; the next re-entry rebuilds it
             try:
                 baseline_index = build_file_index()
             except Exception:
                 pass
             time.sleep(RESTART_DELAY)
             continue
-        break  # 正常结束（stop_event 被设置）
+        break  # normal end (stop_event was set)
 
 
 def write_pid():
@@ -388,14 +409,14 @@ def cleanup_pid():
 
 
 def main():
-    # 注意：本进程由 watchdog.bat 以 -S 拉起（统一跳过 sitecustomize 劫持）。
-    # 不在 main 内自举 -S：实测在 sitecustomize 改写 sys.executable 指向 WPS 路径的
-    # 环境下，os.execv 自举会崩溃；且核心修复已由 watchdog(-S 启动) + run_sync(-S spawn)
-    # 覆盖。
+    # NOTE: this process is started by watchdog.bat with -S (uniformly skips the sitecustomize hijack).
+    # No -S re-exec inside main: in practice os.execv re-exec crashes in environments where
+    # sitecustomize rewrites sys.executable to a WPS path; and the core fix is already covered
+    # by watchdog (-S start) + run_sync (-S spawn).
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true", help="跑一次 sync 后退出")
-    parser.add_argument("--status", action="store_true", help="打印监听状态 + leader 状态")
+    parser.add_argument("--once", action="store_true", help="run one sync then exit")
+    parser.add_argument("--status", action="store_true", help="print watch status + leader status")
     args = parser.parse_args()
 
     if args.once:
@@ -404,31 +425,31 @@ def main():
 
     if args.status:
         idx = build_file_index()
-        print(f"机器: {MACHINE_ID}")
-        print(f"监听文件数: {len(idx)}")
-        print(f"当前 leader: {'是' if am_leader() else '否（另一台机器活跃）'}")
-        print(f"连续失败计数: {consecutive_failures}/{MAX_CONSECUTIVE_FAILS}")
-        print(f"liveness 文件: {LIVENESS_FILE} (阈值 {LIVENESS_MAX_AGE}s)")
+        print(f"Machine: {MACHINE_ID}")
+        print(f"Watched files: {len(idx)}")
+        print(f"Current leader: {'yes' if am_leader() else 'no (another machine is active)'}")
+        print(f"Consecutive failures: {consecutive_failures}/{MAX_CONSECUTIVE_FAILS}")
+        print(f"liveness file: {LIVENESS_FILE} (threshold {LIVENESS_MAX_AGE}s)")
         from collections import Counter
         roots = Counter(str(p.parent) for p in idx)
         for r, c in roots.most_common(10):
             print(f"  {c:4d}  {r}")
         return
 
-    # 启动心跳线程（单 leader 选举）
+    # Start the heartbeat thread (single-leader election)
     threading.Thread(target=heartbeat_loop, daemon=True).start()
     log("=" * 60)
-    log("WorkBuddy 跨设备同步守护进程 v2.2 (单 leader + 自愈 + 卡死自愈) 启动")
+    log("WorkBuddy cross-device sync daemon v2.2 (single leader + self-healing + stall self-healing) started")
     log("=" * 60)
     write_pid()
     try:
         watcher_loop()
     except KeyboardInterrupt:
-        log("收到退出信号")
+        log("Exit signal received")
     finally:
         stop_event.set()
         cleanup_pid()
-        log("守护进程已退出")
+        log("Daemon exited")
 
 
 if __name__ == "__main__":

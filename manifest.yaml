@@ -1,6 +1,6 @@
 name: cross-device-sync
-version: 6.3.0
-description: "让 WorkBuddy 在多台 Windows 电脑之间无缝同步 — WPS 云盘 + Junction 统一路径 + 中转通道 + 自动守护进程（单 leader 选举 / 自愈 / 卡死自愈），附 HANDOFF.md 交接单实现跨设备任务接续"
+version: 6.3.1
+description: "Seamless WorkBuddy sync across Windows PCs - WPS cloud drive + Junction path unification + transit channel + auto daemon (single-leader election / self-heal / hang recovery), with HANDOFF.md handoff notes for cross-device task continuity"
 category: sync-tools
 author: jamesting-eng
 license: MIT
@@ -16,6 +16,6 @@ keywords:
 platforms:
   - windows
 requirements:
-  - "Windows 10/11 + 管理员权限（创建 Junction）"
-  - WPS Office（云盘功能）
+  - "Windows 10/11 + admin rights (to create the Junction)"
+  - WPS Office (cloud-drive feature)
   - Python 3.10+
