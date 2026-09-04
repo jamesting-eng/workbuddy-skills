@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.1.1"
+version: "6.3.0"
 summary: 让 WorkBuddy 在多台 Windows 电脑之间无缝同步（WPS 云盘 + 交接单 + 自动守护进程）
 license: MIT
 tags:
@@ -18,7 +18,9 @@ description: |
   deleted or renamed" errors when switching between computers with different Windows
   usernames, or unify session paths across devices. Triggers include phrases like
   "cross-device sync", "跨设备同步", "sync WorkBuddy", "sync across computers",
-  "can't open old tasks on another computer", "workspace renamed or deleted error".
+  "can't open old tasks on another computer", "workspace renamed or deleted error",
+  "conversation history lost after update", "old chats disappeared after upgrading",
+  "5.5.2 对话丢失", "对话历史不见了", "恢复对话记录".
   每台电脑需约 15 分钟一次性配置（Junction + 数据库隔离 + 路径修复），之后全自动同步。
 agent_created: true
 homepage: https://github.com/jamesting-eng/workbuddy-skills
@@ -490,6 +492,65 @@ On each computer:
 **Note**: Conversations from one computer will NOT appear on the other (by design).
 This is intentional — the `workbuddy.db` is per-computer to prevent overwrite conflicts.
 
+## Recovering History "Lost" After 5.5.x Updates (Path Re-encoding)
+
+**Symptom**: after upgrading WorkBuddy to 5.5.x, conversations older than a cutoff date
+vanish from *some* workspaces, while workspaces untouched since the upgrade still show
+their full history. Nothing was deleted — the bodies are still on disk.
+
+**Root cause**: conversation bodies are stored per-session as JSONL at:
+
+```
+~/.workbuddy/projects/<encoded-cwd>/<session-uuid>.jsonl
+```
+
+The `<encoded-cwd>` directory name is derived from the workspace path. When the
+`C:\WorkBuddy` junction is resolved to the real WPS cloud path (which 5.5.x started
+doing), new messages are written into a *differently-encoded* sibling directory, e.g.:
+
+```
+c-WorkBuddy-2026-06-03-12-41-29                                          <- legacy
+c-Users-62588-WorkBuddy-2026-08-05-14-11-39                              <- legacy
+C-Users-62588-Documents-WPSDrive-...-WorkBuddy-2026-06-03-12-41-29 <- new (5.5.x)
+```
+
+The UI reads only the new directory, so everything written before the re-encoding looks
+"lost". Untouched workspaces keep their legacy directory authoritative, so they display
+fine. This is a *linking* failure, not data loss — no cloud restore, no WPS version
+history, no official support ticket needed.
+
+### Confirm this is your case
+
+Pick an "affected" workspace, find its legacy `c-*-<workspace-suffix>` directory under
+`~/.workbuddy/projects/`, and check that the `<uuid>.jsonl` files inside cover the
+"missing" date range. If yes, recover. If no JSONL exists anywhere, fall back to the
+Emergency Persistence SOP below instead.
+
+### Recovery with scripts/recover_session_jsonl.py
+
+```bash
+# 0. Backup (always)
+python -c "import shutil; shutil.copytree(r'C:\Users\<you>\.workbuddy\projects', r'D:\projects_backup')"
+
+# 1. Preview what would be merged/copied
+python scripts/recover_session_jsonl.py --dry-run
+
+# 2. Execute: merges old+new JSONL per session (dedup by message id, old rows win),
+#    copies legacy-only sessions into the new directory. Never deletes anything.
+python scripts/recover_session_jsonl.py
+
+# 3. Restart WorkBuddy and verify the history is back.
+```
+
+The script is idempotent (message-id dedup makes re-runs safe) and atomic per file
+(tmp + `os.replace`). Sessions still being written to are retried; if a file stays
+busy, the merged result is kept as `*.merge_tmp` and everything else completes.
+
+**Relation to the 5.4.7 IndexedDB bug**: that bug (section below) broke *persistence of
+new* messages; this re-encoding issue breaks *visibility of old* ones. Machines that
+lived through both need both fixes. Since 5.5.2 repaired the IndexedDB side, this
+script closes the remaining gap.
+
 ## Advanced: Session Recovery
 
 When a session's complete message cache (`.jsonl`) is lost but cloud summaries exist:
@@ -880,3 +941,12 @@ Use this when cloud summaries exist but local message cache is gone.
 
 **Merge**: Combine two sessions into one with deduplication, timestamp sorting,
 and source soft-deletion. Backs up target before merging.
+
+### scripts/recover_session_jsonl.py (v6.3+)
+
+Recovers conversation history that "disappeared" after a 5.5.x update caused workspace
+paths to be re-encoded (junction resolved to the real WPS cloud path). Scans
+`~/.workbuddy/projects/` for legacy/new encoded directory pairs, merges each session's
+old+new JSONL with message-id dedup (old rows win), and copies legacy-only sessions
+into the new directory. Idempotent, atomic per file, never deletes. See the
+"Recovering History Lost After 5.5.x Updates" section for the full runbook.
