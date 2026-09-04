@@ -219,20 +219,10 @@ git clone https://github.com/jamesting-eng/workbuddy-skills.git
 
 > 技能文件位于仓库根目录（不是 `cross-device-sync/` 子目录）。安装时把根目录内容对应放入 `~/.workbuddy/skills/cross-device-sync/` 即可。
 
-## 发布到 SkillHub 技能市场（可选）
+## 安装
 
-```powershell
-# ① 打包（自动校验 manifest/SKILL.md，拒绝打包含 secret.txt 的目录）：
-python package.py        # 生成 dist\cross-device-sync-<version>.zip
-
-# ② 上传（二选一）：
-#    网页：skillhub.cn → 右上角「发布 Skill」→ 上传 zip → 填名称/描述/分类 → 提交审核
-#    客户端：WorkBuddy → Skill 管理 → 「发布到 SkillHub」
-# ③ 审核通过后在技能列表点「上架」，用户即可在 WorkBuddy 内搜索安装
-```
-
-> ⚠️ 本技能含本地脚本（PowerShell/Junction/守护进程），审核会重点看权限用途——SKILL.md 的
-> 「Why This Skill Needs Elevated Access」章节已逐项说明，勿删。
+本 skill 由作者本人维护并发布到 SkillHub：在 WorkBuddy 内搜索 **cross-device-sync** 即可安装。
+请勿通过第三方渠道重新发布本仓库内容；如需分发，请遵循 MIT 许可并保留署名。
 
 ## 许可
 
