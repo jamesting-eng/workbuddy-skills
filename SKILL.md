@@ -524,7 +524,7 @@ history, no official support ticket needed.
 Pick an "affected" workspace, find its legacy `c-*-<workspace-suffix>` directory under
 `~/.workbuddy/projects/`, and check that the `<uuid>.jsonl` files inside cover the
 "missing" date range. If yes, recover. If no JSONL exists anywhere, fall back to the
-Emergency Persistence SOP below instead.
+Emergency Persistence SOP above instead.
 
 ### Recovery with scripts/recover_session_jsonl.py
 

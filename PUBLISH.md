@@ -174,4 +174,4 @@ python skills_store_cli.py publish ./发布目录 --changelog "..." --json
 |---|---|---|---|
 | 6.0.0 | 2026-08-15 | `71a0569` | skillId=156632 / versionId=238390，审核 pending |
 | 6.1.1 | 2026-09-02 | `ceec8af` | skillId=156632，新增 5.4.7 IndexedDB 应急持久化 SOP + sync_cli.py 统一入口；同步将 SkillHub 线上包从 v5 文件集提升为与 GitHub v6 一致（补 watchdog.py / manifest.yaml / LICENSE.txt / sync_identity v3.6 / watch_sync v2.2） |
-| 6.3.0 | 2026-09-04 | （本次） | 新增 5.5.x「路径重编码致历史失联」恢复 SOP + `scripts/recover_session_jsonl.py`（id 去重合并、幂等、原子替换）；SkillHub 中文版 changelog 全中文 |
+| 6.3.0 | 2026-09-04 | `b9ad626` | 新增 5.5.x「路径重编码致历史失联」恢复 SOP + `scripts/recover_session_jsonl.py`（id 去重合并、幂等、原子替换）；SkillHub 中文版 changelog 全中文（skillId=156632 / versionId=286824） |
