@@ -49,6 +49,14 @@ HEARTBEAT_STALE_SEC = 20
 
 # ---------------------------------------------------------------- helpers
 
+try:
+    from safe_remove import safe_remove
+except ImportError:
+    import os as _os
+    import sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from safe_remove import safe_remove
+
 def machine_id() -> str:
     return (os.environ.get("COMPUTERNAME")
             or os.environ.get("HOSTNAME")
@@ -187,7 +195,7 @@ def cmd_stop() -> int:
     pf = pid_file()
     if pf.is_file():
         try:
-            pf.unlink()
+            safe_remove(pf, "temp payload file")
             print(f"[+] removed stale {pf.name}")
         except OSError:
             pass
@@ -323,7 +331,7 @@ def cmd_startup_remove() -> int:
         print("[=] no startup entry found")
         return 0
     try:
-        target.unlink()
+        safe_remove(target, "stale target file")
     except OSError as exc:
         print(f"[x] failed to remove startup entry: {exc}")
         return 1

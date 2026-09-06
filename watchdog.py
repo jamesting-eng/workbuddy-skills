@@ -33,6 +33,14 @@ LOG_FILE = SYNC_DIR / "watchdog.log"
 STILL_ACTIVE = 259
 
 
+try:
+    from safe_remove import safe_remove
+except ImportError:
+    import os as _os
+    import sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from safe_remove import safe_remove
+
 def log(msg: str) -> None:
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -95,7 +103,7 @@ def main() -> None:
                 subprocess.run(["taskkill", "/F", "/PID", str(pid)],
                                capture_output=True)
                 try:
-                    PID_FILE.unlink()
+                    safe_remove(PID_FILE, "daemon pidfile")
                 except OSError:
                     pass
                 start_daemon()

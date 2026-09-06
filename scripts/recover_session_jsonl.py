@@ -10,8 +10,8 @@ WorkBuddy stores conversation bodies as JSONL at:
 
 Since 5.5.2, the app resolves the `C:\\WorkBuddy` junction to the real WPS
 cloud path, so NEW messages are written into a NEW encoded directory:
-    c-WorkBuddy-2026-06-03-12-41-29            (old, junction short path)
-    C-Users-62588-Documents-WPSDrive-...-WorkBuddy-2026-06-03-12-41-29   (new)
+    c-WorkBuddy-2026-01-15-10-30-00            (old, junction short path)
+    C-Users-Bob-Documents-WPSDrive-...-WorkBuddy-2026-01-15-10-30-00   (new)
 The UI reads only the NEW directory, so pre-upgrade history seems "lost".
 The old JSONL files are still intact on disk.
 
@@ -102,7 +102,7 @@ def merge_session(old_dir, new_dir, uuid, dry_run=False):
 
 
 def workspace_suffix(dirname):
-    """Extract trailing workspace token like 2026-06-03-12-41-29 from an
+    """Extract trailing workspace token like 2026-01-15-10-30-00 from an
     encoded projects dir name, tolerant of path separators."""
     parts = dirname.replace("\\", "-").replace("/", "-").split("-")
     # find last occurrence of pattern 2026-MM-DD-...

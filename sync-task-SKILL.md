@@ -147,8 +147,8 @@ STATUS.md format (lightweight; key information only):
 ## Detection Logic
 
 1. **Check the computer name** (via the `hostname` command):
-   - Work PC: `DESKTOP-JB3DUCH` (username 62588)
-   - Home PC: `LAPTOP-5RNP9DN3` (username James Ting)
+   - Work PC: `OFFICE-PC` (username Bob)
+   - Home PC: `HOME-PC` (username Alice)
 
 2. **Perform the corresponding action**:
    - About to leave the current computer → Action A: generate handoff note

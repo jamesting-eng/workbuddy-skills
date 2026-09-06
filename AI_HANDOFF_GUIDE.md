@@ -117,7 +117,7 @@ Just reading the docs/memory files is not enough, because the transit directory 
 
 ## 🆕 New-Workspace Hard Requirements (locked in v3.3, preventing the 7/11 gap)
 
-> **Root-cause review (2026-07-11)**: The user created a new workspace at the office and did a large amount of Axistar work there, but the AI neither created
+> **Root-cause review (2026-07-11)**: The user created a new workspace at the office and did a large amount of MyProject work there, but the AI neither created
 > `.workbuddy/memory` for that workspace nor updated HANDOFF.md. As a result, the **narrative logs of that batch of work were never synced over**
 > (the work products arrived via WPS main sync, but the AI logs were zero). This was a rules gap, not a sync failure.
 

@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.3.3"
+version: "6.3.6"
 summary: Seamless WorkBuddy sync across Windows PCs (WPS cloud drive + handoff notes + auto daemon)
 license: MIT
 tags:
@@ -194,7 +194,7 @@ The WPS cloud drive typically syncs to:
 ```
 
 Verify the exact path by checking the WPS cloud drive settings (gear icon > cloud disk cache location).
-The `<numeric_id>` varies per account — common values are `358659758`, but confirm on each machine.
+The `<numeric_id>` varies per account — common values are `123456789`, but confirm on each machine.
 
 On each computer, note the full paths:
 - Cloud drive root: `C:\Users\<username>\Documents\WPSDrive\<id>\WPS云盘\`
@@ -257,7 +257,7 @@ Now when you create a new workspace on one computer, it appears in the sidebar o
 ### Step 3: Unify Workspace Paths via C:\WorkBuddy Junction
 
 WorkBuddy session files reference workspace directories by absolute path. Different computers
-have different user names (`C:\Users\James Ting\...` vs `C:\Users\62588\...`). To solve this,
+have different user names (`C:\Users\Alice\...` vs `C:\Users\Bob\...`). To solve this,
 create a `C:\WorkBuddy` Junction pointing to a cloud-synced workspace directory.
 
 **On EACH computer**, run as Administrator in PowerShell:
@@ -512,9 +512,9 @@ The `<encoded-cwd>` directory name is derived from the workspace path. When the
 doing), new messages are written into a *differently-encoded* sibling directory, e.g.:
 
 ```
-c-WorkBuddy-2026-06-03-12-41-29                                          <- legacy
-c-Users-62588-WorkBuddy-2026-08-05-14-11-39                              <- legacy
-C-Users-62588-Documents-WPSDrive-...-WorkBuddy-2026-06-03-12-41-29 <- new (5.5.x)
+c-WorkBuddy-2026-01-15-10-30-00                                          <- legacy
+c-Users-Bob-WorkBuddy-2026-02-20-09-15-00                              <- legacy
+C-Users-Bob-Documents-WPSDrive-...-WorkBuddy-2026-01-15-10-30-00 <- new (5.5.x)
 ```
 
 The UI reads only the new directory, so everything written before the re-encoding looks
@@ -561,7 +561,7 @@ When a session's complete message cache (`.jsonl`) is lost but cloud summaries e
 ### Recovery via Cloud Summaries
 
 1. Call `conversation_search` to retrieve cloud summaries of the lost conversation
-2. Check the project directory (e.g. `C:\WorkBuddy\2026-06-01-10-12-31\`) for surviving output documents
+2. Check the project directory (e.g. `C:\WorkBuddy\2026-03-10-09-20-45\`) for surviving output documents
 3. Run the recovery script to rebuild a proper cache:
    ```bash
    python scripts/restore_and_merge.py restore <session_id> <project_dir>
@@ -790,6 +790,43 @@ python sync_cli.py status
 
 If `sync_cli.py status` reports anything other than "single leader, no conflict copies,
 daemon alive", resolve that specific subsystem before assuming data loss.
+
+---
+
+## IDE Artifact-Index Zombie Resurrection (WPS Path vs Local Cache Conflict)
+
+Even though `sync_identity.py` already prevents the `MEMORY.md` cross-overwrite pollution (v3.6) and daemon leader-election fights (v2.0+), a **third, deeper class of zombie resurrection** surfaced on 2026-09-06/07 during the C-drive WeChat cleanup: deleting a file locally did **not** remove it from the IDE's artifact panel, and — worse — the file kept coming **back** after a restart. Two independent root causes, both caused by the WPS path being a symlink while local caches/indices are not.
+
+### Symptom A: `.workbuddy/memory/` gets polluted with non-`.md` junk that WPS re-pulls (cleanup -> reverse-pull loop)
+
+**Cause**: During the C-drive cleanup, ~47 one-off scripts/reports (`.py`/`.txt`/`.log`) were written into `<workspace>/.workbuddy/memory/` — a directory symlinked into WPS cloud. `watch_sync` pushed them to WPS; on the next sync the WPS copy was pulled back. Every "delete locally" was undone by the reverse pull -> an endless zombie loop, and the junk polluted *every* machine through the shared cloud.
+
+**Fix (shipped in `sync_identity.py` v3.8)**:
+- New `cleanup_memory_non_md(dir)` runs **before** every sync on both the local and transit `memory/` dirs, deleting anything that is not `.md`.
+- `.workbuddy/memory/` is now hard-bounded: only `YYYY-MM-DD.md` daily logs and project identity `.md` files (`MEMORY.md`, `STATUS.md`, `DAILY_STATUS.md`, `HOME_WRAPUP.md`, `MORNING_BRIEF.md`) are allowed. Any temp script/report is rejected at the boundary, so there is nothing for WPS to re-pull.
+
+### Symptom B: IDE artifact panel shows dead entries for already-deleted files (survives restart)
+
+**Cause**: WorkBuddy keeps a per-session **artifact-index** (`~/.workbuddy/artifact-index/*.json`, one JSON per session) recording the absolute `file:///` URIs of every Read/Write/present_files call. These JSONs are symlinked into WPS cloud too. Deleting the underlying file on disk does **not** remove its URI from the index, so the IDE artifact panel keeps rendering the zombie entry — and because the index itself is cloud-synced, it even survives a full IDE restart.
+
+**Fix (shipped in `sync_identity.py` v3.8)**:
+- New companion script `cleanup_artifact_index.py` resolves each artifact URI to a real path and drops entries whose file no longer exists (atomic rewrite via `.tmp` + `os.replace`).
+- `sync_identity.py` `main()` now invokes `cleanup_artifact_index.py` on **every sync**, defaulting to *active-only* mode (sessions updated within the last 24h) so historical sessions are left untouched; pass `--all-sessions` to scrub everything.
+- This makes the cleanup run automatically on every sync / daemon cycle — there is no window in which a dead URI can be re-shown.
+
+### How to run the cleaners manually
+
+```bash
+# Scrub dead artifact-index URIs in the active session(s) only:
+python cleanup_artifact_index.py
+# Scrub ALL sessions (use after a big cleanup):
+python cleanup_artifact_index.py --all-sessions --dry-run   # preview
+python cleanup_artifact_index.py --all-sessions            # execute
+```
+
+### Why this is a "software-level" root fix (not a one-time cleanup)
+
+An earlier Seller-Ops workspace hit the same artifact-panel zombie and only did a one-time `.bak-20260905` cleanup — it had **no persistent defense**, so the bug recurred in this workspace. The v3.8 fix is integrated into the sync engine itself, so every future sync re-asserts the boundary automatically. Combined with the v3.6 `MEMORY.md` boundary, the memory/artifact layers now have a closed defense on both sides: the WPS-symlink side (nothing junk to sync) and the local-index side (dead URIs purged each cycle).
 
 ---
 ## Known Limitations

@@ -266,7 +266,7 @@ def fix_jsonl_cwd_paths(projects_dir, workbuddy_dir):
     """Fix cwd field inside all JSONL message cache files.
 
     After path migration, the cwd field in each JSONL message may still
-    contain user-specific paths like c:\\Users\\James Ting\\... instead
+    contain user-specific paths like c:\\Users\\Alice\\... instead
     of the unified C:\\WorkBuddy\\... path. This causes sessions to
     appear empty when opened from a different computer.
 

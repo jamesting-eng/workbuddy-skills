@@ -61,7 +61,7 @@ def restore_session(session_id, project_cwd, topics, db_path, wb_dir):
 
     Args:
         session_id: UUID of the session
-        project_cwd: CWD path with backslashes, e.g. C:\WorkBuddy\2026-06-01-10-12-31
+        project_cwd: CWD path with backslashes, e.g. C:\WorkBuddy\2026-03-10-09-20-45
         topics: List of (role, text) tuples where role is 'user' or 'assistant'
         db_path: Path to workbuddy.db
         wb_dir: Path to .workbuddy directory
@@ -376,7 +376,7 @@ def main():
     if command == "restore":
         if len(sys.argv) < 4:
             print("Usage: restore_and_merge.py restore <session_id> <project_dir>")
-            print("Example project_dir: C:\\WorkBuddy\\2026-06-01-10-12-31")
+            print("Example project_dir: C:\\WorkBuddy\\2026-03-10-09-20-45")
             return 1
 
         session_id = sys.argv[2]

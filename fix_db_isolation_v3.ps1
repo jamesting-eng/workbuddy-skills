@@ -23,7 +23,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ── 路径变量 ──────────────────────────────────────────────────
-$wpsWb   = "$env:USERPROFILE\Documents\WPSDrive\358659758\WPS云盘\.workbuddy"
+$wpsWb   = "$env:USERPROFILE\Documents\WPSDrive\123456789\WPS云盘\.workbuddy"
 $localWb = "$env:USERPROFILE\.workbuddy"
 $bakWb   = "$env:USERPROFILE\.workbuddy_old_symlink"
 

@@ -10,7 +10,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 $local = "$env:USERPROFILE\.workbuddy\workspace-state.json"
-$wps   = "$env:USERPROFILE\Documents\WPSDrive\358659758\WPS云盘\.workbuddy\workspace-state.json"
+$wps   = "$env:USERPROFILE\Documents\WPSDrive\123456789\WPS云盘\.workbuddy\workspace-state.json"
 
 # 1. 检查是否已经是符号链接
 $item = Get-Item $local -Force -ErrorAction SilentlyContinue

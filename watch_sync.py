@@ -14,7 +14,7 @@ v2.0 key improvements (root fix for the 6,895-file WPS "-copy" conflict storm):
     AI_HANDOFF_GUIDE.md). The _sync relay directory is never watched as a whole,
     eradicating the "download → re-push → re-download" loop.
   - [Machine-independent] PYTHON_EXE now uses sys.executable, so it runs directly
-    at home and at the office; the hardcoded 62588 path is gone.
+    at home and at the office; the hardcoded machine-specific path is gone.
   - Manual push.bat kept as a fallback (running it once before leaving is the most reliable).
 
 v2.1 key improvements (self-healing; root fix for the silent week-long death on 7/7):
@@ -101,7 +101,7 @@ MAX_CONSECUTIVE_FAILS = 3  # consecutive-failure threshold that triggers fallbac
 # Must be > SYNC_TIMEOUT + margin to avoid false kills during legitimately long syncs.
 LIVENESS_MAX_AGE = 240
 
-# Machine identity: the computer name (office DESKTOP-7QBVB48 / home James Ting); each machine gets its own heartbeat file
+# Machine identity: the computer name (office OFFICE-PC / home Alice); each machine gets its own heartbeat file
 MACHINE_ID = (os.environ.get("COMPUTERNAME")
               or os.environ.get("HOSTNAME")
               or "unknown").strip()
@@ -118,6 +118,14 @@ pending_refresh = False
 baseline_index = {}            # v2.1: baseline file index (global, easy to reset for self-healing)
 consecutive_failures = 0       # v2.1: consecutive sync failure counter
 
+
+try:
+    from safe_remove import safe_remove
+except ImportError:
+    import os as _os
+    import sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from safe_remove import safe_remove
 
 def log(msg: str):
     line = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
@@ -403,7 +411,7 @@ def write_pid():
 def cleanup_pid():
     try:
         if PID_FILE.exists():
-            PID_FILE.unlink()
+            safe_remove(PID_FILE, "daemon pidfile")
     except Exception:
         pass
 
