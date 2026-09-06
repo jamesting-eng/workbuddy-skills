@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 PKG_NAME = "cross-device-sync"
-VERSION = "6.0.0"
+VERSION = "6.3.2"
 
 EXCLUDE_NAMES = {
     ".git", ".github", "dist", "__pycache__", "node_modules",
