@@ -195,7 +195,7 @@ Run `python find_junk.py` to scan and generate a report; after confirming every 
 
 **Q: How do I recover polluted MEMORY.md files?**
 
-v3.6 prevents recurrence. For already-overwritten files: there is no clean backup in the transit directory or the sync namespace, so you must go back to the corresponding workspace and **manually rebuild them selectively** from conversation history/project output (do not let the AI batch-rebuild automatically — it can easily write the polluted content back).
+v3.6 + v3.7 prevents recurrence. For already-overwritten files: there is no clean backup in the transit directory or the sync namespace, so you must go back to the corresponding workspace and **manually rebuild them selectively** from conversation history/project output (do not let the AI batch-rebuild automatically — it can easily write the polluted content back).
 
 ## Install as a WorkBuddy Skill
 

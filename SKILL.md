@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.3.6"
+version: "6.3.7"
 summary: Seamless WorkBuddy sync across Windows PCs (WPS cloud drive + handoff notes + auto daemon)
 license: MIT
 tags:
@@ -1081,17 +1081,26 @@ The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — onl
 
 ## Resources
 
-### sync_identity.py (v3.6)
+### sync_identity.py (v3.8)
 
 Bidirectional **transit-channel** sync. Collects each workspace's `.workbuddy/memory/` into
 `C:\WorkBuddy\_sync\identity\`, and distributes transit memory back to workspaces on pull.
 Also syncs HANDOFF.md / identity files. v3.4+ auto-cleans WPS conflict-copy files (literal suffix `-副本`, functional) and skips
 any file containing that suffix to prevent sync storms; v3.5 sweeps junk before push.
-**v3.6 (critical)**: only `YYYY-MM-DD.md` daily logs may enter the flat user-level namespace;
+**v3.6 (MEMORY.md boundary)** — only `YYYY-MM-DD.md` daily logs may enter the flat user-level namespace;
 project identity files (MEMORY.md / STATUS.md / DAILY_STATUS.md / HOME_WRAPUP.md /
 MORNING_BRIEF.md) are skipped — previously they collided across workspaces and "newest mtime
 wins" merge fanned one workspace's content into ALL workspaces (two incidents: 7/24, 7/30,
 14 workspaces polluted).
+**v3.7 (write-back disabled, 2026-08-27)** — permanently disables `distribute_user_memory_to_workspaces()`,
+sealing the second-stage fan-out path that could still push user-level memory/ back into
+every workspace after the v3.6 boundary closed the merge step. Same shape of pollution cannot recur.
+**v3.8 (artifact-index + memory-boundary defense, 2026-09-07)** — hard-bounds
+`.workbuddy/memory/` to `.md` only via `cleanup_memory_non_md()` (kills the "clean locally → WPS
+copy reverse-pulls it back" zombie loop surfaced during the 2026-09-06 C-drive cleanup), and
+integrates the sibling `cleanup_artifact_index.py` so the IDE's per-session artifact-index dead
+URIs are purged on every sync (active sessions by default, `--all-sessions` to scrub all).
+See "IDE Artifact-Index Zombie Resurrection" below for the full story.
 
 ### watch_sync.py (v2.2)
 
