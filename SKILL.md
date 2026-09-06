@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.3.2"
+version: "6.3.3"
 summary: Seamless WorkBuddy sync across Windows PCs (WPS cloud drive + handoff notes + auto daemon)
 license: MIT
 tags:
