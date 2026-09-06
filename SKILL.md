@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.3.8"
+version: "6.3.9"
 summary: Seamless WorkBuddy sync across Windows PCs (WPS cloud drive + handoff notes + auto daemon)
 license: MIT
 tags:
@@ -465,7 +465,7 @@ The transit directory is `C:\WorkBuddy\_sync\identity\`. `find_junk.py` / `clean
 up any `-副本` conflict files that slip through (literal Chinese suffix, functional). `sync_identity.py` v3.6+ **only transits
 `YYYY-MM-DD.md` daily logs** — project identity files (MEMORY.md/STATUS.md/...) stay
 workspace-local to prevent cross-workspace overwrite pollution (7/24 & 7/30 incidents).
-v3.7 disables write-back fan-out; v3.8 hard-bounds `memory/` to `.md` and purges stale IDE artifact-index URIs every cycle.
+v3.7 disables write-back fan-out; v3.8 hard-bounds `memory/` to `.md` and purges stale IDE artifact-index URIs every cycle. v3.9 namespaces each workspace's daily logs into per-workspace subdirs under `LOCAL/memory/<ws_name>/` (closes the daily-log collision layer that v3.6 already closed for MEMORY.md).
 
 > ⚠️ `_sync` is not in the daemon's watch list — script upgrades (watch_sync.py / watchdog.bat)
 > must be **manually copied** to the other machine.
@@ -1082,7 +1082,7 @@ The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — onl
 
 ## Resources
 
-### sync_identity.py (v3.8)
+### sync_identity.py (v3.9)
 
 Bidirectional **transit-channel** sync. Collects each workspace's `.workbuddy/memory/` into
 `C:\WorkBuddy\_sync\identity\`, and distributes transit memory back to workspaces on pull.
@@ -1102,6 +1102,7 @@ copy reverse-pulls it back" zombie loop surfaced during the 2026-09-06 C-drive c
 integrates the sibling `cleanup_artifact_index.py` so the IDE's per-session artifact-index dead
 URIs are purged on every sync (active sessions by default, `--all-sessions` to scrub all).
 See "IDE Artifact-Index Zombie Resurrection" below for the full story.
+**v3.9 (daily-log collision fix, 2026-09-07)** — `collect_workspace_memories_to_user()` now namespaces each workspace's daily logs into `LOCAL/memory/<ws_name>/YYYY-MM-DD.md` (one subdir per workspace) instead of the flat `LOCAL/memory/YYYY-MM-DD.md`. The flat layout collided when two workspaces had a log for the same date ("newest mtime wins" overwrote the other and the polluted file propagated to WPS cloud — the 8/26 MyProject board-game vs Legal 法务 incident surfaced in the Legal workspace diagnostic). Per-workspace subdirs make date collisions impossible. Legacy flat daily logs are MOVED (never deleted) to `LOCAL/_v39_legacy_flat_quarantine/`.
 
 ### watch_sync.py (v2.2)
 

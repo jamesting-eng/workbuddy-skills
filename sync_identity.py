@@ -1,8 +1,30 @@
 #!/usr/bin/env python3
 """
-WorkBuddy cross-device identity & memory sync script v3.8
+WorkBuddy cross-device identity & memory sync script v3.9
 =========================================================
 Uses C:\\WorkBuddy\\_sync\\identity\\ as a transit dir to sync across devices.
+
+v3.9 (2026-09-07):
+  - [ROOT-FIX for user-level daily-log cross-workspace collision]
+    collect_workspace_memories_to_user() now namespaces each workspace's daily
+    logs into LOCAL/memory/<ws_name>/YYYY-MM-DD.md (subdir per workspace)
+    instead of the previous FLAT LOCAL/memory/YYYY-MM-DD.md. The flat layout
+    collided when multiple workspaces had a log for the same date (e.g. MyProject's
+    8/26 桌游 vs Legal's 8/26 法务): shutil.copy2 with "newest mtime wins"
+    overwrote the legitimate content with another workspace's content, then the
+    polluted flat file propagated to WPS cloud and surfaced in any workspace
+    that read from ~/.workbuddy/memory/ (the 8/26 incident surfaced in the
+    Legal workspace diagnostic on 2026-09-07). After v3.9, cross-workspace
+    date collisions are impossible because the per-workspace subdirs isolate
+    the namespaces.
+  - [MIGRATION] On the first v3.9 run, any legacy flat daily logs sitting at
+    LOCAL/memory/YYYY-MM-DD.md are quarantined to
+    LOCAL/_v39_legacy_flat_quarantine/YYYY-MM-DD.md (move-only, never delete).
+    They are unreliable (already cross-polluted) and cannot be reassigned to a
+    workspace. Both machines quarantine via the WPS sync of ~/.workbuddy/.
+  - distribute_user_memory_to_workspaces() remains disabled (v3.7) -- the v3.9
+    fix prevents NEW flat pollution at the user-level collect step. This is
+    the "daily log layer" counterpart to v3.6's "MEMORY.md layer" fix.
 
 v3.8 (2026-09-07):
   - [FIX] sync_workspace_memories now cleans non-.md files from BOTH the local
@@ -368,13 +390,38 @@ def distribute_user_memory_to_workspaces(bases: list[Path]) -> int:
 
 
 def collect_workspace_memories_to_user(bases: list[Path]) -> int:
-    """Collect & merge each workspace's memory/*.md into user-level memory/.
+    """Collect & namespace each workspace's memory/*.md (daily logs only) into
+    per-workspace subdirs under user-level memory/.
 
-    Run before leaving the machine, so user-level has the latest memory from all
-    workspaces. Returns count collected.
+    v3.9 fix: each workspace's daily logs now land in
+    LOCAL/memory/<ws_name>/YYYY-MM-DD.md instead of the previous FLAT
+    LOCAL/memory/YYYY-MM-DD.md. The flat layout collided when two workspaces
+    had a log for the same date -- shutil.copy2 "newest mtime wins" overwrote
+    the other workspace's content, and the polluted flat file propagated to the
+    WPS cloud (the 8/26 MyProject board-game vs Legal 法务 incident surfaced in
+    the Legal workspace diagnostic on 2026-09-07). Per-workspace subdirs make
+    date collisions impossible because each namespace is isolated.
+
+    Migration: on every run, any legacy FLAT daily log still sitting directly at
+    LOCAL/memory/YYYY-MM-DD.md is MOVED (never deleted) to
+    LOCAL/_v39_legacy_flat_quarantine/YYYY-MM-DD.md. These are already
+    cross-polluted and cannot be reassigned to a workspace, so they are only
+    quarantined for forensic reference (move-only, per the safety red line).
     """
     user_mem = LOCAL / "memory"
     user_mem.mkdir(parents=True, exist_ok=True)
+
+    # --- v3.9 migration: quarantine legacy FLAT daily logs (move-only) ---
+    quarantine_dir = LOCAL / "_v39_legacy_flat_quarantine"
+    for flat in sorted(user_mem.glob("*.md")):
+        if not flat.is_file():
+            continue
+        if not is_daily_log(flat.name):
+            continue  # keep project-identity files (MEMORY.md / STATUS.md) in place
+        quarantine_dir.mkdir(parents=True, exist_ok=True)
+        target = quarantine_dir / flat.name
+        if not target.exists():
+            shutil.move(str(flat), str(target))
 
     workspaces = find_workspaces(bases)
     if not workspaces:
@@ -385,12 +432,14 @@ def collect_workspace_memories_to_user(bases: list[Path]) -> int:
         ws_mem = ws / ".workbuddy" / "memory"
         if not ws_mem.exists():
             continue
+        dest_dir = user_mem / ws.name
+        dest_dir.mkdir(parents=True, exist_ok=True)
         for md_file in ws_mem.glob("*.md"):
             if not md_file.is_file():
                 continue
             if not is_daily_log(md_file.name):
                 continue  # v3.6: project identity files must not be flattened/fanned-out
-            dest = user_mem / md_file.name
+            dest = dest_dir / md_file.name
             if not dest.exists() or md_file.stat().st_mtime > dest.stat().st_mtime:
                 shutil.copy2(md_file, dest)
                 collected += 1
