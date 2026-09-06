@@ -1,5 +1,5 @@
 name: cross-device-sync
-version: 6.3.7
+version: 6.3.8
 description: "Seamless WorkBuddy sync across Windows PCs - WPS cloud drive + Junction path unification + transit channel + auto daemon (single-leader election / self-heal / hang recovery), with HANDOFF.md handoff notes for cross-device task continuity"
 category: sync-tools
 author: jamesting-eng

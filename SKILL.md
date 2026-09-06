@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.3.7"
+version: "6.3.8"
 summary: Seamless WorkBuddy sync across Windows PCs (WPS cloud drive + handoff notes + auto daemon)
 license: MIT
 tags:
@@ -462,9 +462,10 @@ precise control and cleanup. Two mechanisms on top:
    the one-click-sync launcher (`一键同步.bat` — actual filename on disk, kept in Chinese).
 
 The transit directory is `C:\WorkBuddy\_sync\identity\`. `find_junk.py` / `clean_junk.py` clean
-up any `-副本` conflict files that slip through (literal Chinese suffix, functional). `sync_identity.py` v3.6 **only transits
+up any `-副本` conflict files that slip through (literal Chinese suffix, functional). `sync_identity.py` v3.6+ **only transits
 `YYYY-MM-DD.md` daily logs** — project identity files (MEMORY.md/STATUS.md/...) stay
 workspace-local to prevent cross-workspace overwrite pollution (7/24 & 7/30 incidents).
+v3.7 disables write-back fan-out; v3.8 hard-bounds `memory/` to `.md` and purges stale IDE artifact-index URIs every cycle.
 
 > ⚠️ `_sync` is not in the daemon's watch list — script upgrades (watch_sync.py / watchdog.bat)
 > must be **manually copied** to the other machine.
