@@ -1,0 +1,80 @@
+name: cross-device-sync
+version: 6.4.0
+description: "让 WorkBuddy 在多台 Windows 电脑之间无缝同步——WPS 云盘做中转媒介，SQLite 数据库本地独立防覆盖，配合 Junction 统一工作区路径与守护进程（单 leader 选举 / 崩溃自愈 / 卡死自愈），通过 HANDOFF.md 交接单实现跨设备任务接续。适用于「跨设备同步」「跨电脑同步」「workbuddy 数据库隔离」「workbuddy 会话接续」「workspace deleted or renamed」「双电脑办公」「移动办公」「WorkBuddy 5.4.7 IndexedDB 丢消息过渡」等场景。"
+category: sync-tools
+author: jamesting-eng
+license: MIT
+homepage: https://github.com/jamesting-eng/workbuddy-skills
+repository: https://github.com/jamesting-eng/workbuddy-skills
+keywords:
+  # 英文（国际搜索 + 锚点）
+  - cross-device-sync
+  - workbuddy
+  - codebuddy
+  - wps-cloud
+  - sqlite
+  - windows
+  - symbolick-link
+  - junction
+  - sync-tools
+  - 5.4.7
+  - indexeddb
+  - session-recovery
+  # 中文（国内主要搜索词）
+  - 跨设备同步
+  - 跨电脑同步
+  - 多电脑同步
+  - 双电脑办公
+  - 切换电脑
+  - 会话接续
+  - 任务交接
+  - 工作区同步
+  - WPS云盘
+  - 金山文档
+  - 符号链接
+  - 软链接
+  - Windows同步
+  - SQLite隔离
+  - 同步工具
+  - 会话恢复
+  - 5.4.7修复
+  - IndexedDB丢消息
+  - 数据库隔离
+  - 工作区状态同步
+  - 守护进程
+  - 自动同步
+  - 一键同步
+platforms:
+  - windows
+requirements:
+  - "Windows 10/11 + 管理员权限（创建 Junction）"
+  - WPS Office（云盘功能）
+  - Python 3.10+
+displayName: WorkBuddy 跨设备同步
+summary: 让 WorkBuddy 在多台 Windows 电脑之间无缝同步（WPS 云盘 + 交接单 + 自动守护进程）
+tags:
+  - workbuddy
+  - codebuddy
+  - cross-device-sync
+  - wps-cloud
+  - windows
+  - 跨设备同步
+  - 跨电脑同步
+  - 多电脑同步
+  - 双电脑办公
+  - 切换电脑
+  - 会话接续
+  - 任务交接
+  - 工作区同步
+  - WPS云盘
+  - 金山文档
+  - 符号链接
+  - symlink
+  - 软链接
+  - Junction
+  - Windows同步
+  - SQLite隔离
+  - 同步工具
+  - 会话恢复
+  - 5.4.7修复
+  - IndexedDB丢消息

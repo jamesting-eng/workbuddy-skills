@@ -1,0 +1,21 @@
+name: cross-device-sync
+version: 6.4.0
+description: "Seamless WorkBuddy sync across Windows PCs - WPS cloud drive + Junction path unification + transit channel + auto daemon (single-leader election / self-heal / hang recovery), with HANDOFF.md handoff notes for cross-device task continuity"
+category: sync-tools
+author: jamesting-eng
+license: MIT
+homepage: https://github.com/jamesting-eng/workbuddy-skills
+repository: https://github.com/jamesting-eng/workbuddy-skills
+keywords:
+  - cross-device-sync
+  - workbuddy
+  - codebuddy
+  - wps-cloud
+  - sqlite
+  - windows
+platforms:
+  - windows
+requirements:
+  - "Windows 10/11 + admin rights (to create the Junction)"
+  - WPS Office (cloud-drive feature)
+  - Python 3.10+
