@@ -17,6 +17,7 @@ What it does:
 
 Zero dependencies (stdlib only). Run from the repo root.
 """
+import re
 import sys
 import zipfile
 from pathlib import Path
