@@ -52,6 +52,14 @@ def validate() -> None:
     fm = text.split("---", 2)[1]
     assert "name:" in fm, "SKILL.md frontmatter missing name"
     assert "description:" in fm, "SKILL.md frontmatter missing description"
+    # Language gate: the dist tree is the SkillHub (Chinese) package. If the body
+    # has almost no CJK, the English GitHub-source docs were copied over by mistake.
+    cjk_lines = sum(1 for ln in text.splitlines() if re.search(r"[\u4e00-\u9fff]", ln))
+    assert cjk_lines >= 100, (
+        f"REFUSING to package: dist SKILL.md has only {cjk_lines} CJK lines — "
+        "the Chinese docs were likely overwritten by the English root versions. "
+        "Restore them from the latest dist zip archive before packaging."
+    )
     secret = PKG_SRC / "secret.txt"
     assert not secret.exists(), (
         "REFUSING to package: secret.txt (real passcode) found in dist tree. "
