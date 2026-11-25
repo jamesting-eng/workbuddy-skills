@@ -31,7 +31,29 @@ pushed out of the runner's glob while tests still pass, deletions resurrected by
 junction re-upload / reverse-pull, daemon fights, ~1.45 MB/min bulk operations. See the full
 failure-mode table in `SKILL.md` → "Why real-time cloud sync is NOT the default".
 
-**Weekly backup rules**: seed the manifest from the cloud (so week one is incremental, not a full
+**Weekly backup rules**: seed the manifest from the cloud
+
+**Run it (the tool is `weekly_backup.py`, shipped with this skill):**
+
+```bash
+# NEW INSTALL (cloud empty): preview, then first FULL backup
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
+
+# MIGRATED FROM LIVE SYNC (cloud already has files): seed baseline -> first run is incremental
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --seed
+
+# EVERY WEEK: preview then confirm; --status to inspect
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --status
+```
+
+It writes `weekly_backup_manifest.json` and `weekly_backup.log` into the cloud folder; a second
+dry-run reporting `nothing changed - already up to date` means the backup is current. Every
+error prints a plain-language hint ("source is not a directory", "manifest unreadable", ...),
+with the full translation table in `SKILL.md` -> Troubleshooting.
+ (so week one is incremental, not a full
 recopy); copy only new/changed files; WRITE-ONLY to cloud, never read back, never delete cloud
 files; skip `node_modules` / `.git` / `dist` / caches / `-副本*`; verify with a dry run (0 changes
 right after a success).

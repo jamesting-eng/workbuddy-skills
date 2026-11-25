@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "7.0.2"
+version: "7.1.0"
 summary: Local-first WorkBuddy continuity - live work on a local disk, WPS cloud as a weekly backup pipe only (v7 drops real-time sync as the default)
 license: MIT
 tags:
@@ -29,6 +29,21 @@ homepage: https://github.com/jamesting-eng/workbuddy-skills
 ---
 
 # Cross-Device Sync
+
+## Which mode am I on? (decide once, then stop re-deciding)
+
+There is exactly ONE recommended mode now. If you are unsure, you are on the legacy mode and
+should plan a migration — the two are not meant to run side by side.
+
+| Your situation | Mode to use | What to do |
+|---|---|---|
+| New install, or you just want it to work | **LOCAL-FIRST + WEEKLY BACKUP** (recommended) | Keep live work on a local disk; run `weekly_backup.py` weekly. Skip everything marked LEGACY. |
+| Migrating from a live cloud sync pipe | **LOCAL-FIRST + WEEKLY BACKUP** | Move live work locally; seed the backup manifest from cloud (`--seed`); then treat old sync docs as reference only. |
+| Maintaining an existing real-time sync setup, or recovering lost files | **LEGACY sync pipe** (reference/recovery only) | Use the LEGACY sections near the end. Do not start new dense work here. |
+
+Rule of thumb: if a section is labelled LEGACY, it is NOT the default — it exists for existing
+users and recovery. When instructions from two sections disagree, the LOCAL-FIRST section wins.
+
 
 ## Why real-time cloud sync is NOT the default (read this first)
 
@@ -79,6 +94,45 @@ toolkit. Do NOT start new dense-development workspaces on a live sync pipe.
 4. Include what matters (workspace artifacts, skills, code repos); skip noise (`node_modules`,
    `.git`, `dist`, caches, `__pycache__`, `-副本*` conflict files) unless you have a reason.
 5. Verify with a dry run (expect 0 changes right after a successful run) and keep a run log.
+
+**The tool that does this: `weekly_backup.py` (shipped in this skill).** Everything above is
+implemented by that one script — there is no need to build the pipeline yourself. It is
+WRITE-ONLY toward the cloud, defaults to dry-run, and never deletes on either side.
+
+Copy-paste procedure (replace the two paths with your own; both are arguments, nothing is
+hardcoded to a particular machine or username):
+
+```bash
+# Paths: SRC = your LOCAL live workspace (read-only source); DST = a folder inside your cloud drive.
+# 1) NEW INSTALL (cloud empty): preview, then run the FULL first backup.
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
+
+# 2) MIGRATED FROM LIVE SYNC (cloud already holds your files): seed baseline from cloud,
+#    so the first run is INCREMENTAL instead of a full recopy.
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --seed
+
+# 3) EVERY WEEK after that: dry-run to see what would change, then confirm.
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
+
+# 4) Check state any time:
+python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --status
+```
+
+What you get: a `weekly_backup_manifest.json` (the `mtime`+`size` baseline) and a
+`weekly_backup.log` with every copy, skip and error, both under DST. A successful second
+dry-run reports `nothing changed - already up to date`; that is the verification signal.
+
+**Scheduling it weekly (optional)**: put one line in Task Scheduler / a weekly automation —
+`python weekly_backup.py --src <local> --dst <cloud> --confirm`. Keep `--dry-run` for manual checks.
+
+**Error messages are plain language, not raw tracebacks.** If something fails, the tool prints
+WHAT happened and WHAT TO DO. Read the "Error message -> what to do" table in Troubleshooting
+before asking for help. Common ones: `source is not a directory` (wrong SRC — pass the workspace
+root), `manifest unreadable` (rebuild with `--seed`), `no files in cloud destination` (you used
+`--seed` on a new install — drop `--seed` and run the FULL first backup).
+
 
 **When you need the other machine to pick up work**: run/await the weekly job, then on the other
 machine read `HANDOFF.md` and "always keep on this device" for the folders you need before going
@@ -1247,6 +1301,28 @@ to change workspace binding — it doesn't work.
 
 ## Troubleshooting
 
+### Error messages -> what to do (read this before asking for help)
+
+The tools here try to say what happened in plain language. Raw system errors still appear for
+genuine OS failures; use this table to translate them.
+
+| Message / error | What it actually means | What to do |
+|---|---|---|
+| `source is not a directory` | The local path you passed is a file, or a cloud path, or does not exist | Pass the LOCAL workspace ROOT as `--src`, not a single file |
+| `manifest unreadable` | The backup manifest is corrupt or was edited by hand | Rebuild it with `--seed` (migrated) or let the next full run recreate it |
+| `no files in cloud destination` | You used `--seed` on a NEW install where the cloud is empty | Drop `--seed` and run the FULL first backup (`--confirm`) |
+| `nothing changed - already up to date` | Success: every file is already in the cloud | Nothing to do; this is the verification signal, not an error |
+| `WinError 5 / 32` | File locked by another program (cloud client, editor, antivirus) | Close the owning program and retry; never force-delete a locked file |
+| `WinError 2 / 3` | File already gone (another cleanup got there first) | Ignore |
+| `PowerShell: "syntax error at parse stage", nothing printed` | LF-only line endings in `.ps1` (PowerShell 5.1 fails at parse time) | Rewrite as CRLF + pure ASCII, then re-run |
+| `Bash exit 49, zero output` | A command was blocked by the tool's security filter (keyword in the text) | Move the payload into a file and run it; see Related environment traps |
+| DISM `0x80070005` | NOT a permission bug — `PendingFileRenameOperations` has reboot-pending entries | Reboot once, then re-run DISM |
+
+If a tool printed only a technical error with no hint, that itself is a gap: record the symptom
+and root cause here so the next reader gets a plain-language answer.
+
+
+
 **Error lookup table** (check here first when a script errors out, then jump to the section):
 
 | What you see / error keyword | Most likely cause | Go to |
@@ -1456,6 +1532,17 @@ integrates the sibling `cleanup_artifact_index.py` so the IDE's per-session arti
 URIs are purged on every sync (active sessions by default, `--all-sessions` to scrub all).
 See "IDE Artifact-Index Zombie Resurrection" below for the full story.
 **v3.9 (daily-log collision fix, 2026-09-07)** — `collect_workspace_memories_to_user()` now namespaces each workspace's daily logs into `LOCAL/memory/<ws_name>/YYYY-MM-DD.md` (one subdir per workspace) instead of the flat `LOCAL/memory/YYYY-MM-DD.md`. The flat layout collided when two workspaces had a log for the same date ("newest mtime wins" overwrote the other and the polluted file propagated to WPS cloud — the 8/26 MyProject board-game vs Legal 法务 incident surfaced in the Legal workspace diagnostic). Per-workspace subdirs make date collisions impossible. Legacy flat daily logs are MOVED (never deleted) to `LOCAL/_v39_legacy_flat_quarantine/`.
+
+
+### weekly_backup.py (v7.1.0+)
+
+The weekly BACKUP tool for the recommended local-first mode. Read-only on the local source,
+WRITE-ONLY toward the cloud destination: it copies new/changed files keyed by an `mtime`+`size`
+manifest and never reads back or deletes on either side. Default is dry-run; `--confirm`
+executes; `--seed` builds the baseline from an existing cloud copy (migrated users).
+Arguments: `--src <local-workspace> --dst <cloud-folder> [--manifest ...] [--log ...]`.
+Outputs `weekly_backup_manifest.json` + `weekly_backup.log` under DST. See "Recommended mode"
+for the full copy-paste procedure.
 
 ### watch_sync.py (v2.2)
 
