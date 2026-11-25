@@ -1,5 +1,5 @@
 name: cross-device-sync
-version: 7.0.1
+version: 7.0.2
 description: "Local-first WorkBuddy workspace (live data on local disk) with WPS cloud demoted to a weekly one-way incremental backup pipe; Junction path unification + HANDOFF.md handoff notes for explicit cross-device continuity. Legacy real-time sync pipe kept for existing users only."
 category: sync-tools
 author: jamesting-eng

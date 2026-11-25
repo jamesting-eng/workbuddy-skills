@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "7.0.1"
+version: "7.0.2"
 summary: Local-first WorkBuddy continuity - live work on a local disk, WPS cloud as a weekly backup pipe only (v7 drops real-time sync as the default)
 license: MIT
 tags:
@@ -23,7 +23,7 @@ description: |
   sync, sync WorkBuddy, backup WorkBuddy to cloud, weekly backup, cloud sync too fragile,
   "can't open old tasks on another computer", "workspace renamed or deleted error",
   "conversation history lost after update", "recover conversation history".
-  One-time local-first setup (~15 min), then a weekly incremental backup job.
+  One-time local-first setup (~15 min). New installs do a full first backup, migrated setups start incremental; later runs are always incremental.
 agent_created: true
 homepage: https://github.com/jamesting-eng/workbuddy-skills
 ---
@@ -70,8 +70,9 @@ toolkit. Do NOT start new dense-development workspaces on a live sync pipe.
 
 **Weekly backup job — the rules that matter**
 
-1. Baseline = the cloud's current file set (the local tree usually originated from the cloud).
-   Seed the manifest from the cloud on first run, so week one is INCREMENTAL, not a full recopy.
+1. First-run baseline depends on how you arrived:
+   - **New install / empty cloud**: the cloud is empty, so the first run is a FULL backup (and, if you are coming from a live sync pipe, a full sync into the local workspace). Only later runs are incremental.
+   - **Migrated from a live sync pipe**: the local tree came from the cloud and the cloud already holds those files. Seed the manifest from the cloud so the first run is INCREMENTAL, not a full recopy.
 2. `mtime`+`size` manifest; copy only new/changed files.
 3. WRITE-ONLY. Never read back, never delete cloud-side files — deleting there is what caused
    the resurrection incidents.
@@ -93,7 +94,7 @@ legacy real-time sync pipe, see "Legacy mode" sections near the end — but plan
 |------|--------------|---------|
 | ① | Put live workspaces and conversation bodies on a local disk (e.g. D:) | "Recommended mode" above |
 | ② | Keep `workbuddy.db` local per machine (never sync the SQLite file) | "Why the DB must stay local" in Overview below |
-| ③ | Set up a weekly one-way incremental backup to the cloud (manifest seeded from cloud) | "Weekly backup job" above |
+| ③ | Set up the weekly backup: new installs start FULL, migrated setups seed the manifest from cloud and start INCREMENTAL | "Weekly backup job" above |
 | ④ | Use `HANDOFF.md` for explicit cross-machine handoff | Workflow Step 6 (legacy doc still valid for the note format) |
 | ⑤ | Only if you must: keep the legacy real-time sync pipe, with all its caveats | "Legacy mode" sections |
 

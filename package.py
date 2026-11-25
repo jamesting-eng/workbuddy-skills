@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 PKG_NAME = "cross-device-sync"
-VERSION = "7.0.1"
+VERSION = "7.0.2"
 
 # SkillHub package is built from the Chinese-ready dist tree, NOT the repo root.
 # ROOT is the GitHub/English source; dist/cross-device-sync/ is the SkillHub/Chinese
