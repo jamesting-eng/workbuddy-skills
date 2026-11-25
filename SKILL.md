@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "7.0.0"
+version: "7.0.1"
 summary: Local-first WorkBuddy continuity - live work on a local disk, WPS cloud as a weekly backup pipe only (v7 drops real-time sync as the default)
 license: MIT
 tags:
