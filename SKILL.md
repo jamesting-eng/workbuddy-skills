@@ -2,8 +2,8 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "6.4.4"
-summary: Seamless WorkBuddy sync across Windows PCs (WPS cloud drive + handoff notes + auto daemon)
+version: "7.0.0"
+summary: Local-first WorkBuddy continuity - live work on a local disk, WPS cloud as a weekly backup pipe only (v7 drops real-time sync as the default)
 license: MIT
 tags:
   - workbuddy
@@ -12,69 +12,122 @@ tags:
   - wps-cloud
   - windows
 description: |
-  Configure WorkBuddy for seamless synchronization across multiple Windows computers
-  via WPS cloud drive (WPS). This skill should be used when the user wants
-  to set up cross-device sync, migrate WorkBuddy data to cloud storage, fix "workspace
-  deleted or renamed" errors when switching between computers with different Windows
-  usernames, or unify session paths across devices. Triggers include phrases like
-  "cross-device sync", "sync WorkBuddy", "sync across computers",
+  Local-first WorkBuddy continuity. Keep live conversations and artifacts on a LOCAL disk
+  (e.g. D:\WorkBuddy\...); use WPS cloud drive ONLY as a weekly one-way incremental BACKUP
+  pipe, never as a real-time sync pipe. Real-time cloud sync is fragile under dense daily
+  work and has caused severe conversation/artifact loss (field incident 2026-11-24): conflict
+  copies, silent rollback, resurrected deletions, daemon fights. This skill should be used
+  when the user wants cross-device continuity, a safe weekly backup to the cloud, to migrate
+  work off a live sync pipe, to fix "workspace deleted or renamed" errors across machines with
+  different Windows usernames, or to recover lost conversation history. Triggers: cross-device
+  sync, sync WorkBuddy, backup WorkBuddy to cloud, weekly backup, cloud sync too fragile,
   "can't open old tasks on another computer", "workspace renamed or deleted error",
-  "conversation history lost after update", "old chats disappeared after upgrading",
-  "recover conversation history".
-  One-time setup per computer (~15 min: Junction + DB isolation + path fix), then fully automatic.
+  "conversation history lost after update", "recover conversation history".
+  One-time local-first setup (~15 min), then a weekly incremental backup job.
 agent_created: true
 homepage: https://github.com/jamesting-eng/workbuddy-skills
 ---
 
 # Cross-Device Sync
 
-## Overview
+## Why real-time cloud sync is NOT the default (read this first)
 
-Set up WorkBuddy to sync cross-device through WPS cloud drive.
+**Bottom line: keep live WorkBuddy work on a local disk. Use the cloud as a backup, not as a live sync bus.**
 
-**Core insight**: `workbuddy.db` (SQLite) CANNOT be synced — two computers writing the same
-database file will overwrite each other's conversation history. Instead, this skill sets up a
-**hybrid architecture** where:
+A cloud drive that syncs in real time looks convenient — edit on one PC, see it on the other. In
+dense daily use it is fragile, and the failures are silent and expensive. Field incident
+2026-11-24: a workspaces kept on a live cloud-sync pipe lost conversation bodies and
+artifacts; recovery needed a manual byte-level merge of a 272 MB JSONL. This is not rare bad
+luck — it follows from how these sync clients behave:
 
-- **`workbuddy.db`** stays local on each computer (never synced, no overwrites)
-- **Skills, scripts, memory, configs** sync via WPS cloud (symbolic links)
-- **Workspace directories** (`C:\WorkBuddy\`) sync via Windows Junction
-- **`workspace-state.json`** syncs via file symbolic link (tiny file, safe to share)
-- **Cross-device task continuity** is handled via `HANDOFF.md` handoff notes, not db sync
+| Failure mode | What actually happens |
+|---|---|
+| `-副本<timestamp>` conflict copies | A single machine writing the same file repeatedly is enough. The sync layer renames the NEW content to `-副本<ts>` and leaves the OLD content under the real name. Reading the file back immediately after writing does NOT catch it — rollback lands seconds later. |
+| Silent test-set shrink | A test file pushed aside to `-副本<ts>` no longer matches the runner's glob. Tests still report "all passed" with fewer files (observed 11 -> 10). Judge by FILE COUNT, not the green result. |
+| Resurrected deletions | Delete a cloud copy; the client re-uploads the local copy within minutes. Deleting under a live sync pipe is unreliable. |
+| Junction re-upload / reverse-pull | Relocating a WPS-junctioned runtime dir to a local disk frees C: briefly, then the client re-uploads it and reverse-pulls junk (e.g. non-`.md` files into `.workbuddy/memory/`). |
+| Daemon fights / state conflicts | Two machines' daemons race over the transit dir; `workspace-state.json`, `MEMORY.md`, `STATUS.md` disagree across machines. |
+| Slow bulk operations | ~1.45 MB/min through the client on a ~200k-file tree; bulk deletes take hours unless sync is paused first. |
 
-This also addresses the core problem: each computer has a different `C:\Users\<name>` path,
-which breaks session references when switching devices.
+**Therefore v7's recommended mode is LOCAL-FIRST + WEEKLY BACKUP.** The real-time sync pipe is
+kept in this document only as (a) legacy reference for users still on it and (b) a recovery
+toolkit. Do NOT start new dense-development workspaces on a live sync pipe.
+
+## Recommended mode: local-first + weekly backup pipe
+
+**Architecture**
+
+- **Live layer (local disk, e.g. `D:\WorkBuddy\...`)**: active workspaces, conversation bodies
+  (JSONL), artifacts, and code repos live here and are written at full speed with no sync client
+  in the path. `workbuddy.db` (SQLite) stays local on each machine — two machines must never
+  write the same DB file.
+- **Backup layer (cloud drive, weekly)**: a scheduled job copies CHANGED files one-way to the
+  cloud, keyed by an `mtime`+`size` manifest. It is WRITE-ONLY toward the cloud: it never reads
+  cloud files back into the local disk, and never deletes anything on the cloud side.
+- **Handoff layer (explicit)**: for deliberate cross-device continuation, copy the selected
+  files into the pipe (or let the weekly job carry them), and write a `HANDOFF.md` note so the
+  next machine knows where things stand. Handoff is an explicit act, not a background miracle.
+
+**Weekly backup job — the rules that matter**
+
+1. Baseline = the cloud's current file set (the local tree usually originated from the cloud).
+   Seed the manifest from the cloud on first run, so week one is INCREMENTAL, not a full recopy.
+2. `mtime`+`size` manifest; copy only new/changed files.
+3. WRITE-ONLY. Never read back, never delete cloud-side files — deleting there is what caused
+   the resurrection incidents.
+4. Include what matters (workspace artifacts, skills, code repos); skip noise (`node_modules`,
+   `.git`, `dist`, caches, `__pycache__`, `-副本*` conflict files) unless you have a reason.
+5. Verify with a dry run (expect 0 changes right after a successful run) and keep a run log.
+
+**When you need the other machine to pick up work**: run/await the weekly job, then on the other
+machine read `HANDOFF.md` and "always keep on this device" for the folders you need before going
+offline.
 
 ## Quick Start
 
-**Who this is for**: two (or more) Windows PCs, all running WorkBuddy, all signed into the
-same WPS cloud drive account, that need to continue work seamlessly across machines.
+**Who this is for**: two (or more) Windows PCs running WorkBuddy that need cross-device
+continuity. The default path below is local-first + weekly backup. If you are still on the
+legacy real-time sync pipe, see "Legacy mode" sections near the end — but plan a migration.
 
-**One-time setup (~15 min per computer, fully automatic afterwards)**:
+| Step | What it does | Details |
+|------|--------------|---------|
+| ① | Put live workspaces and conversation bodies on a local disk (e.g. D:) | "Recommended mode" above |
+| ② | Keep `workbuddy.db` local per machine (never sync the SQLite file) | "Why the DB must stay local" in Overview below |
+| ③ | Set up a weekly one-way incremental backup to the cloud (manifest seeded from cloud) | "Weekly backup job" above |
+| ④ | Use `HANDOFF.md` for explicit cross-machine handoff | Workflow Step 6 (legacy doc still valid for the note format) |
+| ⑤ | Only if you must: keep the legacy real-time sync pipe, with all its caveats | "Legacy mode" sections |
 
-| Step | What it does | Tool | Details |
-|------|--------------|------|---------|
-| ① | Install WPS on both PCs, sign in to the same account, confirm the cloud sync folder | WPS settings | Workflow Step 1 |
-| ② | Migrate `.workbuddy` to the hybrid architecture (db stays local, rest goes to cloud) | `fix_db_isolation_v3.ps1` | Step 2 |
-| ③ | Sync the sidebar workspace list (`workspace-state.json`) via cloud | `fix_workspace_state_sync.ps1` | Step 2b |
-| ④ | Create the `C:\WorkBuddy` Junction to unify workspace paths | Admin PowerShell | Step 3 |
-| ⑤ | Fix legacy session paths, restart WorkBuddy, verify | `scripts/fix_paths.py` | Steps 4 & 7 |
+**Daily use is three sentences**:
 
-**Daily use is just three sentences**:
-
-1. **Leaving a computer**: close WorkBuddy properly (tray icon → Exit); have the AI update the handoff note.
-2. **Arriving at the other computer**: tell the AI "check the handoff note" — it reads `C:\WorkBuddy\_sync\HANDOFF.md` before doing anything else.
-3. **After finishing work**: the AI updates the handoff note so the next machine can pick up.
+1. **Leaving a machine**: close WorkBuddy properly (tray icon -> Exit); have the AI update the handoff note; run (or await) the weekly backup.
+2. **Arriving at the other machine**: tell the AI "check the handoff note" — it reads `HANDOFF.md` before doing anything else.
+3. **After finishing**: update the handoff note so the next machine can pick up.
 
 **Not sure which section to read? Look it up by situation**:
 
 | Your situation | Read |
 |----------------|------|
-| First-time setup on a new PC | Quick Start → Workflow Steps 1–4 |
-| About to switch machines | Workflow Steps 5–6 + Worked Examples #3 |
-| Conversation history missing / blank bodies | "Recovering History Lost After 5.5.x Updates" or the 5.4.7 SOP |
-| Sync seems broken | FAQ → the Troubleshooting error lookup table |
-| Want to understand the design | Overview + Step 6b (three-layer architecture) |
+| Setting up cross-device continuity | Recommended mode + Quick Start above |
+| Cloud sync feels fragile / I lost files | "Why real-time cloud sync is NOT the default" + Troubleshooting |
+| Migrating off a live sync pipe | "Deleting Files Safely" (Three-Axe) + recovery sections |
+| Conversation history missing / blank bodies | "Recovering History Lost After 5.5.x" or the 5.4.7 SOP |
+| Still on the legacy real-time pipe | "Legacy mode: real-time sync reference" near the end |
+
+## Overview (legacy sync architecture — reference & recovery)
+
+Everything from this point describes the LEGACY real-time sync architecture. Its core insight is
+still valid and must be preserved: **`workbuddy.db` (SQLite) CANNOT be synced** — two computers
+writing the same database file will overwrite each other's conversation history. In the legacy
+mode:
+
+- **`workbuddy.db`** stays local on each computer (never synced, no overwrites)
+- **Skills, scripts, memory, configs** sync via the cloud (symbolic links)
+- **Workspace directories** (`C:\WorkBuddy\`) sync via Windows Junction
+- **`workspace-state.json`** syncs via file symbolic link (tiny file, safe to share)
+- **Cross-device task continuity** is handled via `HANDOFF.md` handoff notes, not DB sync
+
+This also addresses the core problem: each computer has a different `C:\Users\<name>` path,
+which breaks session references when switching devices.
 
 ## Capability Boundaries
 
@@ -113,7 +166,21 @@ The other machine hasn't generated it yet, or WPS hasn't finished syncing. Wait 
 `workspace-state.json` sync lag. Wait ~5s, right-click the file in WPS → "Always keep on this device", restart WorkBuddy. See Troubleshooting → "New workspaces not appearing on other computer".
 
 **Q4: A flood of `-副本` (conflict-copy) files appeared in WPS?**
-WPS conflict copies, usually from both machines writing the same file. Scan with `find_junk.py`, clean with `clean_junk.py` (only deletes copies that have a pristine original). If they keep coming back in bulk, leader election is broken — restart `watchdog.bat` on both machines.
+WPS conflict copies. Two distinct causes — check the first one before blaming the second:
+
+1. **ONE machine repeatedly writing the same file inside the sync directory** (the common
+   case, and the one this skill's earlier wording missed). The sync layer renames the
+   **new** content to `<name>-副本<timestamp>` and leaves the **old** content under the real
+   name. Field 2026-10-29: two consecutive edits to one test file, both silently reverted.
+   ⚠️ **A read-back immediately after the write does NOT catch it** — at that instant the
+   file still holds the new bytes; the rollback lands seconds later. Do not treat
+   "I verified it and it was correct" as proof when the path is sync-monitored.
+2. **Both machines writing the same file** (leader election broken) — then the flood is
+   bulk and continuous; restart `watchdog.bat` on both machines.
+
+Either way: scan with `find_junk.py`, clean with `clean_junk.py` (only deletes copies that
+have a pristine original). If the 副本 holds content you actually want, copy it back over the
+real name **and commit to git immediately** — git is what survives the rollback.
 
 **Q5: Does it support macOS or a cloud drive other than WPS?**
 No. The script stack is Windows-only (Junction / PowerShell / robocopy) and the sync channel assumes WPS behavior. See Capability Boundaries.
@@ -329,7 +396,12 @@ adopts a dedicated scratchpad convention to keep C: healthy:
   - `D:\WorkBuddy\_py\` — pip `--target` libraries
   - `D:\WorkBuddy\tmp\` — transient files
   - `D:\WorkBuddy\<test-workspace>\` — permanent test workspace (never run full
-    tests on C:)
+    tests on C:). ⚠️ **Do not judge "the tests really ran" by the green result alone — judge
+    it by the FILE COUNT.** A test file that the sync layer pushed aside becomes
+    `<name>-副本<ts>.ts`, which is not matched by the runner's glob, so an entire test file
+    quietly leaves the run set while everything still reports green. Field 2026-10-29:
+    vitest went from 11 files to 10 and the run was still "all passed". Compare the count
+    against the previous run every time; a shrinking count is a lost file, not a cleanup.
   - `D:\WorkBuddy\<build>\` — build output
   - `D:\WorkBuddy\npm-cache\` / `D:\WorkBuddy\npm-global\` — Node/npm caches
   - `D:\WorkBuddy\backups\` / `D:\WorkBuddy\deploy\` — backups and deployment
@@ -398,7 +470,12 @@ Reference implementation: `D:\WorkBuddy\migrate-workbuddy-entities-to-d.cmd`
 windows-script-encoding skill for the full .bat iron rules).
 
 
-## Workflow
+## Workflow (LEGACY real-time sync pipe — reference & recovery only)
+
+> **⚠️ Legacy mode.** This 7-step workflow builds the OLD real-time cloud sync pipe. Do NOT use
+> it as the default for new dense-development workspaces (see "Why real-time cloud sync is NOT
+> the default"). Use it only if you are maintaining an existing sync-pipe setup or recovering
+> one. For new setups follow "Recommended mode: local-first + weekly backup pipe".
 
 ### Step 1: Identify Cloud Drive Path
 
@@ -860,6 +937,24 @@ When the workspace tree (`C:\WorkBuddy\...`) or skill/memory subdirs sit under W
 sync, deleting files is unsafe by default — WPS may write a `-副本` (conflict-copy) sibling the
 moment the original goes missing, and a naive `rm -rf` can deadlock on WPS file locks. Use this
 three-axe method whenever you need to bulk-delete files under any WPS-synced path.
+
+### Axe 0: pause WPS sync first — this is about **speed**, not safety
+
+Axes 1-3 below make a delete *safe*. They do not make it *fast*. Every unlink on a
+sync-monitored path pays a round trip through the sync client, so throughput collapses:
+
+> **Measured 2026-10-29:** deleting a `node_modules` tree (~200k files, 204 MB) inside a
+> WPS-synced directory ran at **~1.45 MB/min** — the first 22 minutes cleared only 32 MB, so
+> the full delete would have taken **~2 hours**. With sync paused it is a matter of seconds.
+
+Practical rule:
+
+- Bulk delete (>a few thousand files, or any `node_modules` / build output) → **pause WPS
+  sync first**, delete, resume. Pausing does not affect local work.
+- Before deciding "it is stuck", check the clock: a slow-but-steady delete is normal here.
+- Never delete a large tree in a sync directory *while it is being edited* — you will race the
+  sync layer and get 副本 files plus a half-deleted tree (partial state is worse than untouched:
+  it occupies space *and* no longer works).
 
 ### Axe 1: run Python with `-S` (skip sitecustomize)
 
