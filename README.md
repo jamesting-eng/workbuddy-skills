@@ -1,35 +1,50 @@
 # Cross-Device Sync for WorkBuddy / CodeBuddy
 
-Sync WorkBuddy seamlessly across multiple Windows computers — conversations created at the office continue at home; tasks started at home carry on at the office.
+**Local-first WorkBuddy continuity: live work stays on a local disk; WPS cloud is a weekly backup pipe only.**
 
 ## What Is This?
 
-> ℹ **Known issue (WorkBuddy 5.4.7)**: users on `5.4.7.37521366` will see **conversation bodies lost on restart** (the sidebar list is still there, but clicking in shows no content). This issue does not affect this skill — the skill is **disk-based** (HANDOFF.md / STATUS.md / logs / handoff notes), and is in fact the only reliable way to keep working through that period. For emergency handling, see the **Emergency Persistence: 5.4.7 IndexedDB Loss Era SOP** section in `SKILL.md`.
+A [WorkBuddy](https://www.codebuddy.cn) skill for keeping work going across two or more Windows
+computers. **v7 changes the default on purpose**: real-time cloud sync is fragile under dense
+daily use (field incident 2026-11-24: conversation bodies + artifacts lost, byte-level manual
+merge needed), so it is no longer the recommended path.
 
-A [WorkBuddy](https://www.codebuddy.cn) skill that solves the problem of syncing WorkBuddy data across multiple Windows computers.
+- **Recommended (v7)**: live workspaces and conversation bodies live on a LOCAL disk (e.g.
+  `D:\WorkBuddy\...`). WPS cloud is used ONLY as a **weekly one-way incremental backup pipe**
+  (`mtime`+`size` manifest, write-only, never delete cloud-side files). Cross-device handoff is
+  explicit via `HANDOFF.md`.
+- **Legacy (v6 and earlier, reference & recovery only)**: the three-layer architecture below —
+  `workbuddy.db` local, subdirectories symlinked into WPS cloud, `C:\WorkBuddy` unified by Junction,
+  `watch_sync.py` v2.2 + `watchdog.bat` auto-daemon, `sync_identity.py` transit channel. Kept for
+  users still on it and for recovery — do NOT start new dense-development workspaces this way.
 
-**Core pain point**: `workbuddy.db` (SQLite) cannot be read and written by two computers at the same time — conversation records would overwrite each other. Each computer's Windows user directory is also different, invalidating session file paths.
+> ℹ WorkBuddy 5.4.7 users: conversation bodies lost on restart (list stays, content blank). The
+> skill is disk-based so it still works through that period; see the "Emergency Persistence:
+> 5.4.7 IndexedDB Loss Era SOP" section in `SKILL.md`.
 
-**Solution (v6 hybrid three-layer architecture)**:
+**Core pain point (still valid)**: `workbuddy.db` (SQLite) cannot be written by two computers at
+once — conversation records overwrite each other; each PC's `C:\Users\<name>` path also differs.
 
-- `workbuddy.db` stays local and independent on each machine (no overwriting)
-- Subdirectories are symlinked into the WPS cloud drive for syncing
-- Workspaces are unified as `C:\WorkBuddy\` via a Junction
-- **Primary sync = WPS Junction**: the entire `C:\WorkBuddy` tree (including the hidden `.workbuddy`) is two-way synced automatically by the WPS cloud drive
-- **Transit fallback = `sync_identity.py`**: precisely controls syncing of identity files / HANDOFF / memory via `_sync/identity/`, and cleans up WPS conflict copies
-- **Automatic daemon = `watch_sync.py` v2.2 + `watchdog.bat`**: auto-push on any file change (single-leader election), self-healing from process crashes/hangs
-- Cross-device task continuity via the `HANDOFF.md` handoff note + `AI_HANDOFF_GUIDE.md`
+**Why real-time cloud sync fails (field-tested)**: `-副本<ts>` conflict copies (even from ONE
+machine writing repeatedly), silent rollback that a write-then-read cannot catch, test files
+pushed out of the runner's glob while tests still pass, deletions resurrected by the client,
+junction re-upload / reverse-pull, daemon fights, ~1.45 MB/min bulk operations. See the full
+failure-mode table in `SKILL.md` → "Why real-time cloud sync is NOT the default".
 
-> 📌 **Architecture correction (v6)**: v3.2 once asserted that "direct Junction transfer fails; everything must go through transit". **Real-world testing in July proved this was a misdiagnosis** — the `C:\WorkBuddy` Junction has always been the working primary sync channel (the alleged "failure" was actually WPS sync delay plus the AI failing to write logs). The correct understanding is **three layers coexisting, each with its own role**: WPS Junction primary sync, transit channel as fallback with precise control, and the daemon making transit near-real-time. The transit channel is retained: it remains a necessary tool for cleaning up conflict copies, forcing alignment, and countering WPS sync laziness.
+**Weekly backup rules**: seed the manifest from the cloud (so week one is incremental, not a full
+recopy); copy only new/changed files; WRITE-ONLY to cloud, never read back, never delete cloud
+files; skip `node_modules` / `.git` / `dist` / caches / `-副本*`; verify with a dry run (0 changes
+right after a success).
 
-## What Changed in v6 (vs v5)
+## What Changed in v7 (vs v6)
 
 | Change | Description |
 |--------|-------------|
-| `sync_identity.py` v3.5 → **v3.8** | **Root-cure for cross-workspace MEMORY.md mutual-overwrite pollution + IDE memory-zombie defense**: **v3.6** — collect/distribute only allows `YYYY-MM-DD.md` daily logs into the flat user-level namespace; project identity files (MEMORY.md/STATUS.md/DAILY_STATUS.md etc.) are always skipped, so they are no longer merged under "newest mtime wins" and fanned back out to all workspaces (two incidents on 7/24 and 7/30, where 14 workspaces' MEMORY.md files were overwritten with the same content). **v3.7** — permanently disables `distribute_user_memory_to_workspaces()`, sealing the second-stage fan-out path. **v3.8** — hard-bounds `.workbuddy/memory/` to `.md` only and purges stale IDE artifact-index URIs every sync. **v3.9** — namespaces each workspace's daily logs into per-workspace subdirs under `LOCAL/memory/<ws_name>/`, eliminating the daily-log cross-workspace collision layer (flat same-date logs could overwrite each other and propagate to WPS cloud). |
-| `watch_sync.py` v2.0 → **v2.2** | v2.1 self-healing: try/except wrapper around the main loop so it never exits, automatic baseline rebuild + fallback pull after consecutive failures, PID file, heartbeat thread protection; v2.2 hang self-healing: all subprocesses launched with `-S` (bypasses sitecustomize's hijacking of unlink/rmtree on WPS paths — the root cause of a silent week-long hang since 7/13), and the main loop refreshes the `liveness_<machine-name>.txt` liveness signal every cycle |
-| **New `watchdog.bat` (v2)** | Watchdog: PID absent (crashed/killed) **or** liveness not updated for over 240s (main loop blocked) → if either condition holds, force-kill and restart; the restart command includes `-S`. Put it in `shell:startup` for machine-reboot-level self-healing |
-| `AI_HANDOFF_GUIDE.md` rewritten | Corrected the three-layer architecture understanding; added the "hard constraints for new workspaces" (first step must create `.workbuddy/memory/STATUS.md` + the day's daily log) and a "wrap-up checklist"; response latency honestly documented as 1-2s |
+| **Doctrine reversal (MAJOR)** | v6's contract "WPS real-time sync = default" is inverted. v7 default = local-first live work + weekly one-way incremental cloud backup; real-time sync is documented as unsafe for dense work and demoted to legacy/reference. |
+| **New opening chapters** | `SKILL.md` now starts with "Why real-time cloud sync is NOT the default" (failure-mode table) and "Recommended mode: local-first + weekly backup pipe" (architecture + 5 rules). Quick Start rewritten around the local-first path. |
+| **Legacy clearly marked** | Old three-layer architecture under "Overview (legacy)", 7-step Workflow flagged LEGACY — for existing users and recovery only. |
+| **Field knowledge preserved** | All hard-won pitfall sections (Three-Axe safe deletion, artifact-index zombie, state conflicts, file-count guard, 5.4.7/5.5.x recovery) and script resources kept unchanged — they apply to both modes. |
+| **No script behavior change** | Pure usage-contract and documentation refactor; helpers unchanged. |
 
 ## Directory Structure
 
@@ -129,7 +144,7 @@ python scripts/fix_paths.py
 
 The script automatically performs four steps: JSON repair → database repair → project cache merge → JSONL cwd path repair.
 
-### 3. Start the Auto-Sync Daemon (v6 recommends watchdog.bat)
+### 3. Start the Auto-Sync Daemon (LEGACY real-time pipe — reference/recovery only)
 
 ```
 # Launch at boot (recommended): put watchdog.bat into shell:startup (Win+R → shell:startup)
