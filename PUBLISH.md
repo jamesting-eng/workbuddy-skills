@@ -176,8 +176,15 @@ Before EVERY publish, walk all files and tick every box. Do not publish until al
 - [ ] **Language**: SkillHub tree = **100% Chinese**; GitHub tree = **100% English**. Scripts
       (`.py` / `.bat` / `.ps1` / `.cmd`) are NEVER translated. (Historic failure: an English
       SKILL.md was shipped to SkillHub twice, costing extra releases.)
-- [ ] **Version string in 5 places, byte-identical**: `manifest.yaml` = `SKILL.md` frontmatter =
-      `package.py` VERSION = GitHub commit message = SkillHub version.
+- [ ] **Version string in ALL places, byte-identical**: `manifest.yaml` = `SKILL.md` frontmatter =
+      `_meta.json` = `package.py` VERSION = GitHub commit message = SkillHub version.
+      **This has silently broken before**: `package.py` VERSION stayed at `6.4.5` while
+      the shipped version was `7.1.0`; the packaging gate (which asserts VERSION against
+      manifest/SKILL.md) would have failed at publish time. Do not eyeball it -- run this
+      one-liner from the skill root and require a single unique version:
+      ```bash
+      python -c "import re,json,pathlib; r=pathlib.Path('.'); v=[re.search(r'version:[\s\x22\x27]*([0-9.]+)',(r/f).read_text(encoding='utf-8')).group(1) for f in ('manifest.yaml','SKILL.md')]; v+=[json.loads((r/'_meta.json').read_text(encoding='utf-8'))['version'], re.search(r'VERSION = \x22([0-9.]+)\x22',(r/'package.py').read_text(encoding='utf-8')).group(1)]; print(v); assert len(set(v))==1, 'VERSION MISMATCH'"
+      ```
 - [ ] **Release notes / changelog**: read line by line -- right level, right version, **no typos**,
       no stale copy-paste from the previous release.
 - [ ] **Changelog = real text, NO file names / paths**, passed inline (never `--changelog <path>`,

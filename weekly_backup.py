@@ -73,6 +73,13 @@ def human_size(n):
 
 def excluded(name, is_dir):
     low = name.lower()
+    # Windows reserved device names (nul, con, prn, aux, com1-9, lpt1-9).
+    # os.walk may surface them as files; os.stat/relpath then resolve to
+    # \\.\<name> on a different mount and relpath() raises ValueError.
+    _stem = low.split('.', 1)[0]
+    if _stem in {'nul', 'con', 'prn', 'aux'} or (
+            len(_stem) == 4 and _stem[:3] in ('com', 'lpt') and _stem[3].isdigit()):
+        return True
     if is_dir and low in EXCLUDE_DIRS:
         return True
     if any(low.startswith(p) for p in EXCLUDE_FILE_PREFIXES):
@@ -100,7 +107,11 @@ def scan_tree(root):
                 st = os.stat(p)
             except OSError:
                 continue
-            rel = os.path.relpath(p, str(root))
+            try:
+                rel = os.path.relpath(p, str(root))
+            except ValueError:
+                # reserved device name resolved to a different mount - skip
+                continue
             out[rel.replace("\\", "/")] = (st.st_size, st.st_mtime_ns)
     return out
 
@@ -195,6 +206,7 @@ def main():
 
     copied = 0
     failed = 0
+    updated = dict((k, list(v)) for k, v in manifest.items())  # baseline: what was already backed up
     for rel in todo:
         s = src / rel.replace("/", os.sep)
         d = dst / rel.replace("/", os.sep)
@@ -202,12 +214,15 @@ def main():
             d.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(s), str(d))  # write-only; never touch cloud source files
             copied += 1
+            # Only a successful copy may advance the manifest entry. A failed
+            # file keeps its OLD entry (or none), so the next run retries it.
+            updated[rel] = list(src_snapshot[rel])
         except OSError as e:
             failed += 1
             log("FAIL %s : %s" % (rel, ascii_safe(e)), log_path)
-    updated = dict((k, list(v)) for k, v in src_snapshot.items())
     save_manifest(manifest_path, updated, "incremental backup %s" % datetime.now().strftime("%Y-%m-%d"))
-    log("DONE: copied=%d failed=%d manifest=%d" % (copied, failed, len(updated)), log_path)
+    log("DONE: copied=%d failed=%d pending=%d manifest=%d" % (
+        copied, failed, len(todo) - copied, len(updated)), log_path)
     return 0 if failed == 0 else 1
 
 

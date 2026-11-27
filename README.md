@@ -31,32 +31,33 @@ pushed out of the runner's glob while tests still pass, deletions resurrected by
 junction re-upload / reverse-pull, daemon fights, ~1.45 MB/min bulk operations. See the full
 failure-mode table in `SKILL.md` → "Why real-time cloud sync is NOT the default".
 
-**Weekly backup rules**: seed the manifest from the cloud
+**Weekly backup rules**: decide identity first — if the cloud already holds the original
+workspace (identity flip / migration), write back into that SAME tree and use `--seed` (week one
+is incremental); only a genuinely empty cloud means a first FULL run. Keep the ledger
+(`manifest` + `log`) on LOCAL disk, never on the cloud. Write-only to cloud, never read back or
+delete; skip `node_modules` / `.git` / `dist` / caches / conflict copies; verify with dry-run.
 
 **Run it (the tool is `weekly_backup.py`, shipped with this skill):**
 
 ```bash
-# NEW INSTALL (cloud empty): preview, then first FULL backup
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
+# MANIFEST / LOG are LOCAL ledger paths - a ledger rewritten weekly on the cloud breeds conflict copies.
+# Identity flip / migration (cloud already has the original workspace) -> seed, first run is incremental.
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --seed
 
-# MIGRATED FROM LIVE SYNC (cloud already has files): seed baseline -> first run is incremental
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --seed
+# New install (cloud genuinely empty) -> preview, then first FULL backup.
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --dry-run
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --confirm
 
-# EVERY WEEK: preview then confirm; --status to inspect
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --status
+# Every week: dry-run then confirm; --status to inspect.
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --dry-run
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --confirm
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --status
 ```
 
-It writes `weekly_backup_manifest.json` and `weekly_backup.log` into the cloud folder; a second
-dry-run reporting `nothing changed - already up to date` means the backup is current. Every
-error prints a plain-language hint ("source is not a directory", "manifest unreadable", ...),
-with the full translation table in `SKILL.md` -> Troubleshooting.
- (so week one is incremental, not a full
-recopy); copy only new/changed files; WRITE-ONLY to cloud, never read back, never delete cloud
-files; skip `node_modules` / `.git` / `dist` / caches / `-副本*`; verify with a dry run (0 changes
-right after a success).
+The ledger is created at your LOCAL path, never on the cloud. A second dry-run reporting
+`nothing changed - already up to date` means the backup is current. In `DONE: copied=N failed=N
+pending=N manifest=N`, failed files are NOT recorded into the manifest and are retried next run.
+Every error prints a plain-language hint; full table in `SKILL.md` -> Troubleshooting.
 
 ## What Changed in v7 (vs v6)
 

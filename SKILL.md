@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "7.1.0"
+version: "7.1.2"
 summary: Local-first WorkBuddy continuity - live work on a local disk, WPS cloud as a weekly backup pipe only (v7 drops real-time sync as the default)
 license: MIT
 tags:
@@ -85,54 +85,68 @@ toolkit. Do NOT start new dense-development workspaces on a live sync pipe.
 
 **Weekly backup job — the rules that matter**
 
-1. First-run baseline depends on how you arrived:
-   - **New install / empty cloud**: the cloud is empty, so the first run is a FULL backup (and, if you are coming from a live sync pipe, a full sync into the local workspace). Only later runs are incremental.
-   - **Migrated from a live sync pipe**: the local tree came from the cloud and the cloud already holds those files. Seed the manifest from the cloud so the first run is INCREMENTAL, not a full recopy.
+1. **Decide your identity FIRST, then the baseline** — getting this backwards wastes a full
+   copy and risks writing duplicate data into the fragile cloud pipe:
+   - **Identity flip (most common)**: your local workspace was copied FROM the cloud and is
+     now the live primary, with cloud demoted to backup. The ORIGINAL cloud workspace folder
+     IS the backup target — write back into that SAME tree, do not create a new empty folder.
+     Use `--seed` to baseline from the cloud's existing files; week one is incremental.
+     **Never create a fresh empty folder and run a full copy** — that duplicates the same data
+     into the fragile cloud pipe.
+   - **New install / cloud genuinely empty**: only then is the first run a FULL backup (`--confirm`).
+   - Rule of thumb: **cloud already holds the original workspace -> `--seed`; cloud truly empty
+     -> `--confirm` full**.
 2. `mtime`+`size` manifest; copy only new/changed files.
 3. WRITE-ONLY. Never read back, never delete cloud-side files — deleting there is what caused
    the resurrection incidents.
 4. Include what matters (workspace artifacts, skills, code repos); skip noise (`node_modules`,
-   `.git`, `dist`, caches, `__pycache__`, `-副本*` conflict files) unless you have a reason.
-5. Verify with a dry run (expect 0 changes right after a successful run) and keep a run log.
+   `.git`, `dist`, caches, `__pycache__`, conflict copies) unless you have a reason.
+5. **Keep the ledger LOCAL, not on the cloud**: point `--manifest` / `--log` at a LOCAL disk
+   path (e.g. a tools folder on D:). Those two files are rewritten/appended every week; on
+   the cloud they become the exact pattern that generates WPS conflict copies. The cloud
+   should receive only changed workspace files.
+6. Verify with a dry run (expect 0 changes right after a successful run) and keep a run log.
 
 **The tool that does this: `weekly_backup.py` (shipped in this skill).** Everything above is
 implemented by that one script — there is no need to build the pipeline yourself. It is
 WRITE-ONLY toward the cloud, defaults to dry-run, and never deletes on either side.
 
-Copy-paste procedure (replace the two paths with your own; both are arguments, nothing is
-hardcoded to a particular machine or username):
+Copy-paste procedure (replace the placeholders; all paths are arguments, nothing is hardcoded):
 
 ```bash
-# Paths: SRC = your LOCAL live workspace (read-only source); DST = a folder inside your cloud drive.
-# 1) NEW INSTALL (cloud empty): preview, then run the FULL first backup.
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
+# SRC = local live workspace (read-only); DST = cloud backup target (write into the SAME tree).
+# MANIFEST / LOG = LOCAL ledger paths (must be on local disk, NOT the cloud).
+# 1) Identity flip / migrated from live sync (cloud already has the original workspace):
+#    seed from cloud -> first run is incremental.
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --seed
 
-# 2) MIGRATED FROM LIVE SYNC (cloud already holds your files): seed baseline from cloud,
-#    so the first run is INCREMENTAL instead of a full recopy.
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --seed
+# 2) NEW INSTALL (cloud genuinely empty): preview, then first FULL backup.
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --dry-run
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --confirm
 
-# 3) EVERY WEEK after that: dry-run to see what would change, then confirm.
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --dry-run
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --confirm
+# 3) EVERY WEEK: dry-run to see changes, then confirm.
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --dry-run
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --log "<local-dir>/weekly_backup.log" --confirm
 
 # 4) Check state any time:
-python weekly_backup.py --src "<local-workspace>" --dst "<cloud-backup-folder>" --status
+python weekly_backup.py --src "<local>" --dst "<cloud>" --manifest "<local-dir>/weekly_backup_manifest.json" --status
 ```
 
-What you get: a `weekly_backup_manifest.json` (the `mtime`+`size` baseline) and a
-`weekly_backup.log` with every copy, skip and error, both under DST. A successful second
-dry-run reports `nothing changed - already up to date`; that is the verification signal.
+The ledger (`weekly_backup_manifest.json` = `mtime`+`size` baseline, `weekly_backup.log` = every
+copy/skip/error) is created at YOUR LOCAL path, never on the cloud. A second dry-run reporting
+`nothing changed - already up to date` is the verification signal. In the log line
+`DONE: copied=N failed=N pending=N manifest=N`: `failed>0` means exit code 1, failed files are
+NOT written into the manifest and are retried next run; `pending` is the retry count.
 
-**Scheduling it weekly (optional)**: put one line in Task Scheduler / a weekly automation —
-`python weekly_backup.py --src <local> --dst <cloud> --confirm`. Keep `--dry-run` for manual checks.
+**Scheduling it weekly (optional)**: put step 3's `--confirm` command in Task Scheduler / a
+weekly automation. If using WorkBuddy's own scheduler, WorkBuddy must be running at trigger
+time; Windows Task Scheduler (`schtasks.exe`) is blocked by security policy in some sandboxes —
+if so, use the WorkBuddy scheduler instead. Use `--dry-run` for manual checks.
 
-**Error messages are plain language, not raw tracebacks.** If something fails, the tool prints
-WHAT happened and WHAT TO DO. Read the "Error message -> what to do" table in Troubleshooting
-before asking for help. Common ones: `source is not a directory` (wrong SRC — pass the workspace
-root), `manifest unreadable` (rebuild with `--seed`), `no files in cloud destination` (you used
-`--seed` on a new install — drop `--seed` and run the FULL first backup).
-
+**Error messages are plain language, not raw tracebacks.** See the "Error message -> what to do"
+table in Troubleshooting. Common ones: `source is not a directory` (wrong SRC — pass the
+workspace root), `manifest unreadable` (rebuild with `--seed`), `no files in cloud destination`
+ (you used `--seed` on a new install — drop `--seed` and run the FULL first backup).
 
 **When you need the other machine to pick up work**: run/await the weekly job, then on the other
 machine read `HANDOFF.md` and "always keep on this device" for the folders you need before going
@@ -1508,6 +1522,56 @@ If the WPS cloud drive path is different from the default, check WPS settings:
 WPS app > Settings > Cloud Document > Cache Location
 
 The pattern is always `%USERPROFILE%\Documents\WPSDrive\<id>\WPS云盘\` — only `<id>` varies (the trailing folder is the literal WPS cloud-drive folder name).
+
+
+## Field guide: the full local-first cutover (2026-11-27, tested end to end)
+
+The sections above say "what". This says "where it actually gets stuck". After a WPS
+real-time-sync failure, the complete four-step cutover is: **1) copy to D: -> 2) switch the
+junction -> 3) restore conversations -> 4) set up the weekly backup automation**. Each step
+looks simple and each one has a re-work trap.
+
+### Trap 1: copying to D: — fix the target path, avoid a partial copy
+
+- **Fix the target path once: `D:\WorkBuddy\WorkBuddy\`** (outer `D:\WorkBuddy\` is the data
+  root; the inner `WorkBuddy` matches the cloud's folder name). After the junction switch,
+  `C:\WorkBuddy` points here and the path encoding lines up. **Do NOT put workspaces directly
+  under `D:\WorkBuddy\` root** — then the junction switch breaks `C:\WorkBuddy\2026-...`
+  and every conversation body goes "missing".
+- **One rule for "where to copy"**: you are replacing `C:\WorkBuddy`, so copy its ENTIRE
+  target (the cloud's `...\WPS Cloud\WorkBuddy` folder) verbatim to `D:\WorkBuddy\WorkBuddy`
+  — "swap the drive letter to D, keep the directory structure". Verify immediately:
+  `D:\WorkBuddy\WorkBuddy\<workspace-suffix>` must correspond one-by-one to
+  `C:\WorkBuddy\<workspace-suffix>`.
+- **Do not cap the walk** (no "first N files"): a capped copy silently produces a partial
+  tree; verify file counts and byte totals on both sides before switching.
+
+### Trap 2: switching the junction — do it while the app is fully closed
+
+- Close WorkBuddy completely (tray -> Exit) and quit the cloud client; otherwise the old
+  junction is in use and the delete/recreate fails with WinError 5/32. Record the old links
+  BEFORE deleting them; a reversible script logs them first, then deletes and recreates.
+- Verify with `os.path.realpath` (or `fsutil reparsepoint query`), not `os.path.islink()` —
+  Windows junctions return False from `islink()`.
+- A single unexpected `-copy<timestamp>` during the switch means the cloud client is still
+  running; stop it and redo that step.
+
+### Trap 3: restoring conversations — the body lives in a different file tree
+
+- The sidebar list and the conversation BODY are stored separately; after a path change the
+  list can show while the body stays "loading". Restore the body from the D: copy by
+  matching session IDs, not by letting the app re-fetch (which can overwrite with an empty body).
+- Keep a sidecar copy of any large session `jsonl` that lacks a body — it is still real history.
+- Verify by opening several known conversations after the switch, not just checking file sizes.
+
+### Trap 4: the weekly-backup automation — update its prompt after the cutover
+
+- Any pre-existing weekly-backup automation still points at the OLD architecture: change its
+  source path, move the ledger off the cloud to local, and update report/log paths. The
+  prompt text must be edited everywhere or the job keeps running and reporting on the old
+  layout.
+- After `automation_update(mode="update")`, verify the returned `nextRunAt` and `prompt`
+  actually changed.
 
 ## Resources
 
