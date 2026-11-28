@@ -285,6 +285,16 @@ git clone https://github.com/jamesting-eng/workbuddy-skills.git
 # i.e. put this repo root's SKILL.md / *.py / *.bat / scripts/ etc. into it as a whole
 ```
 
+
+> **Package vs source tree.** The tree above is the GitHub SOURCE. The published SkillHub zip
+> does NOT contain `.bat` / `.ps1` wrappers (the format rejects `.bat`) or the build tool
+> `package.py`. In an installed package use `python sync_cli.py <push|pull|sync|status|start>`
+> for everything the old wrappers did, and `python weekly_backup.py ...` for the weekly backup.
+> `package.py` running from an installed package fails with a missing source tree — that is
+> expected; it is a build tool, not a runtime script. See `SKILL.md` -> "What is actually in
+> the package" for the exact shipped file list.
+
+
 3. In a WorkBuddy conversation, just say "cross-device sync" or "help me sync WorkBuddy across multiple computers" and this skill triggers automatically.
 
 > The skill files live in the repository root (not a `cross-device-sync/` subdirectory). When installing, put the root directory's contents into `~/.workbuddy/skills/cross-device-sync/` accordingly.

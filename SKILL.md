@@ -2,7 +2,7 @@
 name: cross-device-sync
 slug: cross-device-sync
 displayName: Cross-Device Sync for WorkBuddy
-version: "7.1.2"
+version: "7.1.3"
 summary: Local-first WorkBuddy continuity - live work on a local disk, WPS cloud as a weekly backup pipe only (v7 drops real-time sync as the default)
 license: MIT
 tags:
@@ -43,6 +43,36 @@ should plan a migration — the two are not meant to run side by side.
 
 Rule of thumb: if a section is labelled LEGACY, it is NOT the default — it exists for existing
 users and recovery. When instructions from two sections disagree, the LOCAL-FIRST section wins.
+
+
+## What is actually in the package (check before following a command)
+
+The published zip contains exactly these files. If a path below is not listed, it is NOT in the
+package — do not try to run it. (Legacy `.bat` / `.ps1` wrappers live only in the GitHub source
+tree and are rejected by the SkillHub package format; `sync_cli.py` replaces all of them.)
+
+```
+SKILL.md, README.md, PUBLISH.md, manifest.yaml, LICENSE.txt
+sync_cli.py, sync_identity.py, watch_sync.py, watchdog.py, weekly_backup.py
+workspace_sync.py, clean_junk.py, cleanup_artifact_index.py, find_junk.py, safe_remove.py
+scripts/fix_paths.py, scripts/recover_session_jsonl.py, scripts/restore_and_merge.py
+secret-example.txt, secret.txt.example
+sync-identity-guide.md, sync-task-SKILL.md, AI_HANDOFF_GUIDE.md
+```
+
+Old wrapper -> package equivalent (use the right column, the left column is GitHub-only):
+
+| Legacy file (GitHub source only, NOT in the package) | Use instead (in the package) |
+|---|---|
+| `push.bat` / `pull.bat` / `one-click-sync.bat` / `start_sync.bat` | `python sync_cli.py push` / `pull` / `sync` / `start` |
+| `watchdog.bat` | `python sync_cli.py start` (starts the watchdog chain); `status` to inspect |
+| `一键切换.cmd` / `每周备份.cmd` | `python weekly_backup.py ...` (see "Weekly backup job") |
+| `fix_db_isolation_v3.ps1` / `fix_workspace_state_sync.ps1` | GitHub source tree only — see `AI_HANDOFF_GUIDE.md` for the manual equivalent |
+| `home_check.py` / `final_check.py` | `python sync_cli.py status` + the checks in Troubleshooting |
+
+`package.py` is the BUILD tool and intentionally ships only in the GitHub source tree — running
+it from an installed package is not a supported operation and will fail with a missing source
+tree. That is expected, not a broken package.
 
 
 ## Why real-time cloud sync is NOT the default (read this first)
@@ -445,7 +475,7 @@ elevated operations exist for exactly these reasons:
 | `fix_workspace_state_sync.ps1` | Symlinks `workspace-state.json` (a few KB) so newly created workspaces appear in the other computer's sidebar |
 | `scripts/fix_paths.py` | Rewrites stale `C:\Users\<old-name>` path references in the user's own session JSON / SQLite / caches after the path unification |
 | `watch_sync.py` daemon | Local file watcher (stdlib only, polling mtime). Watches the user's own memory/handoff files and copies them into a transit folder when they change. Single-leader election via local heartbeat files avoids concurrent writes. No network I/O |
-| `watchdog.bat` | Restarts the local daemon if it crashes or hangs (checks a local PID file and a liveness file). Runs at user logon via `shell:startup` |
+| `watchdog.bat` (GitHub source only) / `sync_cli.py start` (in package) | Restarts the local daemon if it crashes or hangs (checks a local PID file and a liveness file) |
 | `secret.txt.example` | Template for a user-chosen sync passcode to verify both machines see the same shared folder. The real `secret.txt` is deliberately excluded from git and from the packaged zip (enforced by `package.py`) |
 
 Nothing here reads credentials, browses the network, or modifies anything outside
@@ -1370,7 +1400,7 @@ and root cause here so the next reader gets a plain-language answer.
 
 ### Diagnostic Script
 
-Use `home_check.py` (or `final_check.py` on the primary computer) for a full system audit:
+For a full system audit use `python sync_cli.py status` plus the checks in Troubleshooting (the old `home_check.py` / `final_check.py` are NOT in the package):
 
 ```bash
 python home_check.py
